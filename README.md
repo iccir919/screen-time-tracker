@@ -16,8 +16,8 @@ Tested on macOS 14 and macOS 27. This is an independent project, not affiliated 
 ## Getting started
 
 ```
-git clone https://github.com/iccir919/screen_time_tracker.git
-cd screen_time_tracker
+git clone https://github.com/iccir919/screen-time-tracker.git
+cd screen-time-tracker
 npm run archive          # save your Screen Time data (the first run takes the longest)
 npm start                # open the dashboard
 ```
