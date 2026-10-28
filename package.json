@@ -1,0 +1,17 @@
+{
+  "name": "screen_time_tracker",
+  "version": "0.1.0",
+  "description": "Keep your iPhone and Mac Screen Time history beyond Apple's four-week limit, and explore it in a local dashboard.",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --no-warnings server.mjs",
+    "archive": "node --no-warnings archive_screen_time.mjs",
+    "report": "node --no-warnings screen_time_report.mjs",
+    "lookup": "node --no-warnings app_lookup.mjs",
+    "schedule": "node --no-warnings schedule_archive.mjs"
+  }
+}

@@ -1,0 +1,15 @@
+# Screen Time data and generated output
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+biome_raw/
+screen_time_archive/
+
+# Downloaded by tools/download_chart_js.mjs
+public/vendor/*
+!public/vendor/.gitkeep
+
+# Node and macOS
+node_modules/
+.DS_Store
