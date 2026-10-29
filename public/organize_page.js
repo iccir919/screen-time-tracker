@@ -1,6 +1,6 @@
-// public/apps_page.js
+// public/organize_page.js
 //
-// The Apps page. Two parts:
+// The Organize page. Two parts:
 //   Categories: add, rename, recolor, reorder and delete your categories
 //   Apps: rename each app and pick its category
 // Every change is saved right away through the server's API (see server.mjs).
@@ -41,8 +41,8 @@ const colorVar = (color) => "var(--cat-" + (color + 1) + ")";
 
 function showError(message) {
   document.querySelector("main").innerHTML =
-    '<nav class="nav"><a href="/">Dashboard</a><a href="/apps" aria-current="page">Apps</a></nav>' +
-    '<h1>Apps</h1><p class="card error"></p>';
+    '<nav class="nav"><a href="/">Today</a><a href="/apps">Apps</a><a href="/organize" aria-current="page">Organize</a></nav>' +
+    '<h1>Organize</h1><p class="card error"></p>';
   document.querySelector(".error").textContent = message;
 }
 

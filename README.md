@@ -48,18 +48,26 @@ Running the archiver more often is harmless: each run only adds what's new.
 
 The **Refresh** button at the top saves new Screen Time data (the same as `npm run archive`) and reloads the page, keeping your filters. Next to it, the dashboard shows when the archive was last updated. If you archive from Terminal instead, just reload the page.
 
+Refresh runs with the permissions of the app you started `npm start` from. If that's VS Code's terminal or another app rather than Terminal, that app needs Full Disk Access too.
+
 ```
 npm start -- --no-open   # don't open a browser
 PORT=4000 npm start      # use another port
 ```
 
-The dashboard shows which days have data for each device, hours per day by category or device, a timeline for any day, every app with its opens and session lengths, and when in the week you use your devices.
+It has three pages:
 
-It draws its charts with Chart.js. Run `node tools/download_chart_js.mjs` once to keep a copy in `public/vendor/`, so it works without internet. Otherwise it loads Chart.js from the internet.
+- **Today** (the home page): the day's total and how it compares with your usual for that weekday, each device, a timeline of the day, the top apps, the week around it, and a 12-week calendar. Use the arrows, or click a day in the week or the calendar, to look at another day.
+- **Apps**: every app with its opens and session lengths, hours per day, and when in the week you use your devices. (This is the previous dashboard, until a new Apps page replaces it.)
+- **Organize**: your categories and app names (see below).
+
+"Your usual" is the average of the same weekday in earlier weeks (up to 8), using only days with data from all your devices, so a day missing the iPhone doesn't drag it down. For today, it compares the same part of the day. It needs at least 3 such days before it shows. The same days are used everywhere the Today page compares: the headline (which also names the device that made most of the difference), each device, each app, and the marks on the week chart.
+
+The Apps page draws its charts with Chart.js. Run `node tools/download_chart_js.mjs` once to keep a copy in `public/vendor/`, so it works without internet. Otherwise it loads Chart.js from the internet. The Today page doesn't need it.
 
 ### App names and categories
 
-Open the **Apps** page (the link at the top of the dashboard, or http://localhost:3000/apps) to organize them. Changes save as you make them, and the dashboard uses them the next time it loads.
+Open the **Organize** page (the link at the top of the dashboard, or http://localhost:3000/organize). Changes save as you make them, and the dashboard uses them the next time it loads.
 
 - **Categories:** add your own, rename them, pick each one's color from 8, move them up or down (that's their order in the charts), or delete them. Deleting a category moves its apps to Other. Other is always there and always gray.
 - **Apps:** rename any app and pick its category. Apps you haven't set yet are listed first. The **Set by** column shows whether an app's name and category come from the built-in list or from you, and **Reset** goes back to the built-in ones.
@@ -129,7 +137,7 @@ Daily iPhone totals can come out lower than Apple's. Apple's iPhone total includ
 |---|---|
 | `archive_screen_time.mjs` | Reads Biome and knowledgeC and saves new sessions to the archive |
 | `server.mjs` | The local dashboard server and its API |
-| `public/` | The dashboard and Apps pages (HTML, CSS and browser JavaScript) |
+| `public/` | The dashboard pages (HTML, CSS and browser JavaScript): `today.*`, `old_dashboard.html` with `dashboard.js` (the Apps page for now), `organize.*`, and `refresh.js` for the Refresh button |
 | `screen_time_report.mjs` | Daily totals and top apps in the terminal |
 | `app_lookup.mjs` | Per-app totals, for checking numbers against Apple |
 | `schedule_archive.mjs` | Sets up the daily automatic run |

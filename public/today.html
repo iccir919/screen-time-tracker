@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Screen Time: Today</title>
+<!-- The page's typeface. Without internet it falls back to the system font. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="today.css">
+</head>
+<body>
+<main class="page">
+  <header class="topbar">
+    <div class="brand-nav">
+      <div class="brand">Screen Time</div>
+      <nav class="tabs" aria-label="Pages">
+        <a href="/" aria-current="page">Today</a>
+        <a href="/apps">Apps</a>
+        <a href="/organize">Organize</a>
+      </nav>
+    </div>
+    <div class="refresh">
+      <span class="refresh-note" id="refresh-note" aria-live="polite"></span>
+      <button class="button" id="refresh" title="Save new Screen Time data now (the same as npm run archive)">Refresh</button>
+    </div>
+  </header>
+  <p class="notice error" id="refresh-error" hidden></p>
+
+  <div id="content">
+    <section class="hero">
+      <div class="hero-main">
+        <div class="day-nav">
+          <button class="round-button" id="prev-day" aria-label="Previous day">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+          </button>
+          <h1 class="day-label" id="day-label"></h1>
+          <button class="round-button" id="next-day" aria-label="Next day">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+        <div class="day-total" id="day-total"></div>
+        <p class="day-compare" id="day-compare"></p>
+      </div>
+      <div class="device-cards" id="device-cards"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Through the day</h2>
+        <span class="hint">Hover over a block for the app and time. Gray stripes: screen on, no app recorded.</span>
+      </div>
+      <div id="timeline"></div>
+    </section>
+
+    <div class="two-col">
+      <section class="card">
+        <div class="card-head">
+          <h2>Where the time went</h2>
+          <a class="card-link" href="/apps">All apps</a>
+        </div>
+        <p class="hint" id="apps-hint"></p>
+        <div id="top-apps"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>This week</h2>
+          <span class="hint" id="week-average"></span>
+        </div>
+        <div class="week" id="week"></div>
+        <p class="hint" id="week-note"></p>
+      </section>
+    </div>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Every day, last 12 weeks</h2>
+        <span class="hint">Darker means more time. Click a day to see it.</span>
+      </div>
+      <div id="calendar"></div>
+    </section>
+  </div>
+</main>
+<div class="tip" id="tip" role="tooltip" hidden></div>
+<script type="module" src="today.js"></script>
+</body>
+</html>

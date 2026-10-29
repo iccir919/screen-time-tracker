@@ -1,7 +1,10 @@
 // public/dashboard.js
 //
-// The dashboard page. Loads your usage from the local server (server.mjs)
-// and draws everything in the browser. Chart.js is loaded by index.html.
+// The previous dashboard, shown at /apps until the new Apps page replaces
+// it. Loads your usage from the local server (server.mjs) and draws
+// everything in the browser. Chart.js is loaded by old_dashboard.html.
+
+import { setupRefresh, showLastArchived } from "./refresh.js";
 
 // ---------- Refresh button ----------
 // Set up first, so it works even when there's no data to show yet
@@ -9,49 +12,13 @@
 const VIEW_KEY = "screen_time_dashboard_view";
 let viewState = null; // the filters you picked, kept across a refresh
 
-const refreshButton = document.getElementById("refresh");
-const refreshNote = document.getElementById("refresh-note");
-const refreshError = document.getElementById("refresh-error");
-
-refreshButton.addEventListener("click", async () => {
-  const previousNote = refreshNote.textContent;
-  refreshButton.disabled = true;
-  refreshButton.textContent = "Refreshing...";
-  refreshNote.textContent = "Saving new data. This can take a minute.";
-  refreshError.hidden = true;
-  try {
-    const res = await fetch("/api/archive", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    const result = await res.json();
-    if (!res.ok) throw new Error(result.error ?? "The archiver didn't finish.");
-    try {
-      if (viewState) {
-        sessionStorage.setItem(VIEW_KEY, JSON.stringify({ range: viewState.range, device: viewState.device, colorBy: viewState.colorBy }));
-      }
-    } catch { /* the filters just go back to the defaults */ }
-    location.reload();
-  } catch (err) {
-    refreshError.textContent = err instanceof TypeError ? "Can't reach the dashboard server. Is npm start still running?" : err.message;
-    refreshError.hidden = false;
-    refreshButton.disabled = false;
-    refreshButton.textContent = "Refresh";
-    refreshNote.textContent = previousNote;
-  }
+setupRefresh({
+  beforeReload: () => {
+    if (viewState) {
+      sessionStorage.setItem(VIEW_KEY, JSON.stringify({ range: viewState.range, device: viewState.device, colorBy: viewState.colorBy }));
+    }
+  },
 });
-
-// "Updated 5 min ago", "Updated today at 8:14 AM", "Updated Oct 26"
-function showLastArchived(iso) {
-  if (!iso) return;
-  const then = new Date(iso);
-  const mins = Math.round((Date.now() - then) / 60000);
-  const clock = then.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-  let text;
-  if (mins < 1) text = "just now";
-  else if (mins < 60) text = mins + " min ago";
-  else if (then.toDateString() === new Date().toDateString()) text = "today at " + clock;
-  else text = then.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " at " + clock;
-  refreshNote.textContent = "Updated " + text;
-  refreshNote.title = then.toLocaleString();
-}
 
 // ---------- data ----------
 

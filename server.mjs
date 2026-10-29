@@ -50,8 +50,9 @@ const CONTENT_TYPES = {
   ".ico": "image/x-icon",
 };
 
-// Friendly page paths
-const PAGES = { "/": "index.html", "/apps": "apps.html" };
+// Friendly page paths. /apps shows the previous dashboard until the new
+// Apps page replaces it.
+const PAGES = { "/": "today.html", "/apps": "old_dashboard.html", "/organize": "organize.html" };
 
 class HttpError extends Error {
   constructor(status, message) {
@@ -75,7 +76,7 @@ function sendJson(res, status, body) {
 }
 
 function withArchive(fn, { readOnly = true } = {}) {
-  if (!fs.existsSync(ARCHIVE_DB)) throw new HttpError(404, "No archive yet. Click Refresh on the dashboard, or run npm run archive.");
+  if (!fs.existsSync(ARCHIVE_DB)) throw new HttpError(404, "No archive yet. Click Refresh at the top of the Today page, or run npm run archive.");
   const db = openArchiveDb({ readOnly });
   try {
     return fn(db);
@@ -179,8 +180,15 @@ function runArchiver() {
         let error = null;
         if (err?.killed) error = "The archiver took more than 10 minutes, so it was stopped.";
         else if (err?.code === 2) {
-          error = "The archiver couldn't read Apple's Screen Time files. Give the app you ran npm start from " +
-            "(usually Terminal) Full Disk Access in System Settings > Privacy & Security, then quit it, reopen it and start the dashboard again.";
+          // Which parts were blocked, from the archiver's own messages
+          const blocked = stdout.split("\n").filter((line) => /permission denied/i.test(line))
+            // "  App.InFocus: permission denied..." names its stream; the knowledgeC line doesn't
+            .map((line) => (line.includes(":") ? line.trim().split(":")[0] : "knowledgeC.db"));
+          error = "No new data: macOS blocked the archiver from reading " +
+            (blocked.length ? blocked.join(", ") : "Apple's Screen Time files") + ". " +
+            "The Refresh button has the permissions of the app you ran npm start from. If that's VS Code or another app " +
+            "rather than Terminal, give that app Full Disk Access too (System Settings > Privacy & Security > Full Disk Access), " +
+            "then quit it, reopen it and start the dashboard again. Or start the dashboard from Terminal.";
         } else if (err) error = "The archiver stopped with an error. See the terminal for details.";
         resolve({ ok: !error, error, seconds: Math.round((Date.now() - started) / 1000) });
       });

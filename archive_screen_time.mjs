@@ -542,7 +542,11 @@ function main() {
   console.log("Biome decode");
   for (const stream of STREAMS) decodeStream(archive, stream);
   printSummary(archive);
-  archive.prepare("INSERT OR REPLACE INTO archive_info (key, value) VALUES ('last_run', ?)").run(new Date().toISOString());
+  // Only count it as an update if Apple's files could be read. Otherwise
+  // the dashboard would say "Updated just now" when nothing new came in.
+  if (!permissionDenied) {
+    archive.prepare("INSERT OR REPLACE INTO archive_info (key, value) VALUES ('last_run', ?)").run(new Date().toISOString());
+  }
   archive.close();
   if (permissionDenied) process.exitCode = 2;
 }
