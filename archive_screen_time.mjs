@@ -117,6 +117,12 @@ function openArchive() {
     );
     CREATE INDEX IF NOT EXISTS idx_screen_on_start ON screen_on (start_utc);
 
+    -- When the archiver last ran (shown on the dashboard)
+    CREATE TABLE IF NOT EXISTS archive_info (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
     -- Older versions picked the best source with these views; that logic
     -- now lives in screen_time_lib.mjs
     DROP VIEW IF EXISTS app_usage_best;
@@ -137,6 +143,7 @@ function archiveKnowledgeDb(archive) {
   } catch (err) {
     if (isPermissionError(err)) {
       console.log("  Permission denied. Give Terminal Full Disk Access and rerun.");
+      permissionDenied = true;
       return;
     }
     throw err;
@@ -269,6 +276,7 @@ function backupStream(stream) {
   } catch (err) {
     if (isPermissionError(err)) {
       console.log(`  ${stream.name}: permission denied. Give Terminal Full Disk Access and rerun.`);
+      permissionDenied = true;
       return;
     }
     throw err;
@@ -514,6 +522,10 @@ function printSummary(archive) {
   console.log(`\nArchive: ${ARCHIVE_DB}`);
 }
 
+// Set when Apple's files can't be read, so the run ends with exit code 2.
+// The dashboard's Refresh button uses that to explain the problem.
+let permissionDenied = false;
+
 function main() {
   if (process.platform !== "darwin") {
     console.log("This script only runs on macOS.");
@@ -530,7 +542,9 @@ function main() {
   console.log("Biome decode");
   for (const stream of STREAMS) decodeStream(archive, stream);
   printSummary(archive);
+  archive.prepare("INSERT OR REPLACE INTO archive_info (key, value) VALUES ('last_run', ?)").run(new Date().toISOString());
   archive.close();
+  if (permissionDenied) process.exitCode = 2;
 }
 
 main();

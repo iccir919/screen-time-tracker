@@ -13,10 +13,19 @@
 </head>
 <body>
 <main>
-  <nav class="nav">
-    <a href="/" aria-current="page">Dashboard</a>
-    <a href="/apps">Apps</a>
-  </nav>
+  <div class="topbar">
+    <nav class="nav">
+      <a href="/" aria-current="page">Dashboard</a>
+      <a href="/apps">Apps</a>
+    </nav>
+    <div class="refresh">
+      <span class="refresh-note" id="refresh-note" aria-live="polite"></span>
+      <button class="button" id="refresh" title="Save new Screen Time data now (the same as npm run archive)">Refresh</button>
+    </div>
+  </div>
+  <p class="card error" id="refresh-error" hidden></p>
+
+  <div id="content">
   <h1>Screen Time</h1>
   <p class="sub" id="range-text"></p>
 
@@ -70,6 +79,7 @@
       <summary>Show daily numbers as a table</summary>
       <div class="table-wrap" style="margin-top:12px"><table id="table"></table></div>
     </details>
+  </div>
   </div>
 </main>
 <div id="tip"></div>

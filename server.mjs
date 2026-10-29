@@ -14,6 +14,7 @@
 //   PUT /api/categories/:id     rename and/or recolor: {"name": "...", "color": 2}
 //   DELETE /api/categories/:id  delete one; its apps move to Other
 //   PUT /api/category-order     reorder: {"ids": ["social", "web", ...]}
+//   POST /api/archive      run the archiver now (the dashboard's Refresh button)
 //
 // Run:
 //   npm start                      (opens http://localhost:3000)
@@ -33,7 +34,10 @@ import {
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = "127.0.0.1";
-const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "public");
+const PROJECT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const PUBLIC_DIR = path.join(PROJECT_DIR, "public");
+const ARCHIVE_SCRIPT = path.join(PROJECT_DIR, "archive_screen_time.mjs");
+const ARCHIVE_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_BODY_BYTES = 10_000;
 
 const CONTENT_TYPES = {
@@ -71,7 +75,7 @@ function sendJson(res, status, body) {
 }
 
 function withArchive(fn, { readOnly = true } = {}) {
-  if (!fs.existsSync(ARCHIVE_DB)) throw new HttpError(404, "No archive yet. Run npm run archive first.");
+  if (!fs.existsSync(ARCHIVE_DB)) throw new HttpError(404, "No archive yet. Click Refresh on the dashboard, or run npm run archive.");
   const db = openArchiveDb({ readOnly });
   try {
     return fn(db);
@@ -110,7 +114,7 @@ function getUsage() {
         g.hint.map((h) => [appIndex.get(h.app), Math.round(h.start)])]);
     return {
       devices, categories: categories.map((c) => ({ name: c.name, color: c.color })),
-      apps, segs: out, gaps, generatedAt: new Date().toISOString(),
+      apps, segs: out, gaps, lastArchived: lastArchived(db), generatedAt: new Date().toISOString(),
     };
   });
 }
@@ -148,6 +152,40 @@ function updateApp(appId, body) {
     const info = appInfo(appId, loadAppSettings(db), loadCategories(db));
     return { id: appId, name: info.name, category: info.category, source: info.source };
   }, { readOnly: false });
+}
+
+// When the archiver last finished, or null if it hasn't run since this
+// was added
+function lastArchived(db) {
+  const hasTable = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'archive_info'").get();
+  if (!hasTable) return null;
+  return db.prepare("SELECT value FROM archive_info WHERE key = 'last_run'").get()?.value ?? null;
+}
+
+// Runs the archiver, the same as npm run archive. If a run is already going
+// (a second click, or two tabs), this waits for that one instead of
+// starting another.
+let archiveRun = null;
+
+function runArchiver() {
+  if (archiveRun) return archiveRun;
+  const started = Date.now();
+  archiveRun = new Promise((resolve) => {
+    execFile(process.execPath, ["--no-warnings", ARCHIVE_SCRIPT],
+      { cwd: PROJECT_DIR, timeout: ARCHIVE_TIMEOUT_MS, maxBuffer: 20 * 1024 * 1024 },
+      (err, stdout, stderr) => {
+        const output = (stdout + (stderr ? "\n" + stderr : "")).trim();
+        console.log(output);
+        let error = null;
+        if (err?.killed) error = "The archiver took more than 10 minutes, so it was stopped.";
+        else if (err?.code === 2) {
+          error = "The archiver couldn't read Apple's Screen Time files. Give the app you ran npm start from " +
+            "(usually Terminal) Full Disk Access in System Settings > Privacy & Security, then quit it, reopen it and start the dashboard again.";
+        } else if (err) error = "The archiver stopped with an error. See the terminal for details.";
+        resolve({ ok: !error, error, seconds: Math.round((Date.now() - started) / 1000) });
+      });
+  }).finally(() => { archiveRun = null; });
+  return archiveRun;
 }
 
 function getCategories() {
@@ -237,6 +275,11 @@ async function handle(req, res) {
     if (catMatch && req.method === "DELETE") {
       withArchive((db) => deleteCategory(db, decodePath(catMatch[1])), { readOnly: false });
       return sendJson(res, 200, { deleted: true });
+    }
+    if (p === "/api/archive" && req.method === "POST") {
+      if (process.platform !== "darwin") throw new HttpError(400, "The archiver only runs on macOS.");
+      const result = await runArchiver();
+      return sendJson(res, result.ok ? 200 : 500, result);
     }
     if (p === "/api/category-order" && req.method === "PUT") {
       const body = await readJsonBody(req);

@@ -44,7 +44,9 @@ Running the archiver more often is harmless: each run only adds what's new.
 
 ### The dashboard
 
-`npm start` runs a small server on your Mac and opens http://localhost:3000. It reads the archive each time the page loads, so after archiving, just reload the page. It only listens on this Mac, so nothing is reachable from your network.
+`npm start` runs a small server on your Mac and opens http://localhost:3000. It only listens on this Mac, so nothing is reachable from your network.
+
+The **Refresh** button at the top saves new Screen Time data (the same as `npm run archive`) and reloads the page, keeping your filters. Next to it, the dashboard shows when the archive was last updated. If you archive from Terminal instead, just reload the page.
 
 ```
 npm start -- --no-open   # don't open a browser
