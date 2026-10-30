@@ -4,39 +4,68 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Screen Time: Organize</title>
-<link rel="stylesheet" href="styles.css">
+<!-- The page's typeface. Without internet it falls back to the system font. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="organize.css">
 </head>
 <body>
-<main>
-  <nav class="nav">
-    <a href="/">Today</a>
-    <a href="/apps">Apps</a>
-    <a href="/organize" aria-current="page">Organize</a>
-  </nav>
-  <h1>Organize</h1>
-  <p class="sub">Name your apps and organize your categories. Changes save as you make them, and the dashboard uses them the next time it loads. They're stored in your archive, not in the project files.</p>
+<main class="page">
+  <header class="topbar">
+    <div class="brand-nav">
+      <div class="brand">Screen Time</div>
+      <nav class="tabs" aria-label="Pages">
+        <a href="/">Today</a>
+        <a href="/apps">Apps</a>
+        <a href="/organize" aria-current="page">Organize</a>
+      </nav>
+    </div>
+    <div class="refresh">
+      <span class="refresh-note" id="refresh-note" aria-live="polite"></span>
+      <button class="button" id="refresh" title="Save new Screen Time data now (the same as npm run archive)">Refresh</button>
+    </div>
+  </header>
+  <p class="notice error" id="refresh-error" hidden></p>
 
-  <div class="card">
-    <h2>Categories</h2>
-    <p class="hint">Click a color to change it, or a name to rename it. The order here is the order in the dashboard's charts. Deleting a category moves its apps to Other.</p>
-    <div id="categories"></div>
-    <form class="add-cat" id="add-cat">
-      <input id="new-cat" class="name-input" maxlength="40" placeholder="New category" aria-label="New category name">
-      <button type="submit" class="button">Add</button>
-    </form>
-    <p class="status" id="cat-status" aria-live="polite"></p>
-  </div>
+  <div id="content">
+    <section class="org-head">
+      <h1>Organize</h1>
+      <p class="summary">Name your apps and group them into categories. The Today and Apps pages use these the next time they load. They're saved in your archive, not in the project files.</p>
+    </section>
 
-  <div class="filters">
-    <input type="search" id="search" class="search" placeholder="Search names and app IDs" aria-label="Search apps">
-    <div class="seg" id="show-filter" role="group" aria-label="Show"></div>
-  </div>
+    <div class="org-layout">
+      <section class="card cats-card">
+        <div class="card-head">
+          <h2>Categories</h2>
+          <span class="hint">per day, last 30 days</span>
+        </div>
+        <div class="share" id="cat-share"></div>
+        <div id="categories"></div>
+        <form class="add-cat" id="add-cat">
+          <input id="new-cat" class="field" maxlength="40" placeholder="New category" aria-label="New category name">
+          <button type="submit" class="button primary">Add</button>
+        </form>
+        <p class="hint">Click a color to change it. ⋯ has rename, move and delete. Deleting a category moves its apps to Other. The order here is the order on the other pages.</p>
+        <p class="status" id="cat-status" aria-live="polite"></p>
+      </section>
 
-  <div class="card">
-    <p class="hint" id="count"></p>
-    <div class="table-wrap"><table id="apps"></table></div>
+      <section class="card apps-card">
+        <div class="card-head apps-card-head">
+          <h2>Apps</h2>
+          <div class="apps-tools">
+            <input type="search" id="search" class="field search" placeholder="Search names and app IDs" aria-label="Search apps">
+            <div class="seg small" id="show-filter" role="group" aria-label="Show"></div>
+          </div>
+        </div>
+        <p class="hint" id="count"></p>
+        <div class="org-table" id="apps"></div>
+      </section>
+    </div>
   </div>
 </main>
+<div class="tip" id="tip" role="tooltip" hidden></div>
 <script type="module" src="organize_page.js"></script>
 </body>
 </html>

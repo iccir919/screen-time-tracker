@@ -1,26 +1,44 @@
-/* public/base.css: colors and pieces shared by the Today and Apps pages */
+/* public/base.css: colors and pieces shared by all the pages */
 
 :root {
-  --bg: #F6F6F3;
+  /* a quiet, neutral page: category colors are the only color */
+  --bg: #F7F7F8;
   --surface: #FFFFFF;
-  --ink: #17181C;
-  --ink-2: #3B3D48;
-  --muted: #55586A;
-  --line: #E4E4EC;
-  --track: #EFEFF1;
-  --lane: #F3F3F5;
-  --accent: #2E3036;
-  --accent-soft: #CDCFD4;
-  --accent-tint: #E8E9EC;
-  --link: #2E3036;
+  --ink: #1C1C1E;
+  --ink-2: #3A3A3C;
+  --muted: #6B6B70;
+  --line: #E5E5EA;
+  --card-line: #ECECF0;
+  --track: #F2F2F5;
+  --lane: #F2F2F5;
+  --accent: #1C1C1E;
+  --accent-tint: #EBEBEF;
+  --link: #1C1C1E;
   --less: #2F7A4F;
-  --more: #A8432A;
-  --untracked: #B5B8C0;
-  --empty: #C3C5CB;
-  /* one color per device, in the order the server lists them */
-  --dev-1: #2E3036;
-  --dev-2: #9A9DA6;
-  --dev-3: #5E7A8A;
+  --more: #B4472A;
+  --empty: #C8C8CE;
+  --untracked: #C2C2C7;
+  --untracked-stripes: repeating-linear-gradient(135deg, #C2C2C7 0 3px, #ECECF0 3px 6px);
+  /* category colors, softened: the 10 colors you can pick on Organize, in
+     order (Blue, Orange, Aqua, Yellow, Pink, Green, Violet, Red, Sky,
+     Brown), and Other */
+  --cat-1: #7EA6DC;
+  --cat-2: #EC9F7F;
+  --cat-3: #76C3A2;
+  --cat-4: #E9C46A;
+  --cat-5: #E3A3BE;
+  --cat-6: #8DBA87;
+  --cat-7: #A79BE0;
+  --cat-8: #E58C8C;
+  --cat-9: #86CBE3;
+  --cat-10: #C2A07F;
+  --cat-other: #C8C8CD;
+  /* neutral grays for amounts (calendar, hours), least to most */
+  --heat-1: #EDEDF0;
+  --heat-2: #D6D6DB;
+  --heat-3: #B4B4BB;
+  --heat-4: #8A8A92;
+  --heat-5: #5E5E66;
 }
 
 * { box-sizing: border-box; }
@@ -32,11 +50,11 @@ body {
   font-variant-numeric: tabular-nums;
 }
 a { color: var(--link); }
-h1, h2 { margin: 0; }
-button { font: inherit; }
+h1, h2, h3 { margin: 0; }
+button, input, select { font: inherit; }
 
-.page { max-width: 1120px; margin: 0 auto; padding: 28px 16px 64px; display: flex; flex-direction: column; gap: 24px; }
-#content { display: flex; flex-direction: column; gap: 24px; }
+.page { max-width: 1120px; margin: 0 auto; padding: 28px 16px 64px; display: flex; flex-direction: column; gap: 22px; }
+#content { display: flex; flex-direction: column; gap: 22px; }
 
 /* top bar */
 .topbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; }
@@ -48,37 +66,45 @@ button { font: inherit; }
 .tabs a[aria-current="page"] { background: var(--accent-tint); color: var(--ink); font-weight: 600; }
 .refresh { display: flex; align-items: center; gap: 12px; }
 .refresh-note { color: var(--muted); font-size: 14px; }
-.button { font-weight: 600; font-size: 14px; color: #FFFFFF; background: var(--ink); border: 0; border-radius: 999px;
-  padding: 11px 18px; min-height: 44px; cursor: pointer; }
+.button { font-weight: 600; font-size: 14px; color: var(--ink); background: var(--surface); border: 1px solid #DCDCE1;
+  border-radius: 999px; padding: 10px 18px; min-height: 44px; cursor: pointer; }
+.button:hover:not(:disabled) { background: var(--accent-tint); }
 .button:disabled { opacity: 0.6; cursor: default; }
+.button.primary { background: var(--ink); color: #FFFFFF; border-color: var(--ink); }
+.button.primary:hover:not(:disabled) { background: #000000; }
 
-.notice { margin: 0; background: var(--surface); border-radius: 16px; padding: 16px 20px; }
+.notice { margin: 0; background: var(--surface); border-radius: 16px; padding: 16px 20px; border: 1px solid var(--card-line); }
 .notice.error { box-shadow: inset 0 0 0 2px var(--more); }
 .empty-state { display: flex; flex-direction: column; gap: 8px; }
 
 .less { color: var(--less); font-weight: 600; }
 .more { color: var(--more); font-weight: 600; }
 .muted { color: var(--muted); font-weight: 500; }
-.dot { width: 10px; height: 10px; border-radius: 50%; flex: none; display: inline-block; }
+/* a small square in a category's color */
+.swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex: none; }
 
 /* cards */
-.card { background: var(--surface); border-radius: 22px; padding: 24px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--card-line); border-radius: 20px; padding: 24px;
+  display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .card-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 12px; }
 .card h2 { font-size: 18px; font-weight: 700; }
 .card-link { font-size: 14px; font-weight: 600; text-underline-offset: 3px; }
 .hint { font-size: 14px; color: var(--muted); margin: 0; }
 
-/* horizontal bars, for apps */
+/* horizontal bars */
 .bar-track { height: 10px; background: var(--track); border-radius: 999px; overflow: hidden; }
-.bar-fill { height: 100%; background: var(--accent); border-radius: 999px; }
-.bar-fill.gap { background: repeating-linear-gradient(135deg, var(--untracked) 0 3px, #E2E3E7 3px 6px); }
+.bar-fill { height: 100%; background: var(--cat-other); border-radius: 999px; }
+.bar-fill.gap { background: var(--untracked-stripes); }
 
-/* two-way switches, like 7 days / 30 days */
-.seg { display: inline-flex; flex-wrap: wrap; background: var(--surface); border-radius: 999px; padding: 4px; gap: 2px; }
-.seg button { border: 0; background: transparent; color: var(--muted); font-size: 14px; padding: 9px 14px; border-radius: 999px;
-  min-height: 40px; cursor: pointer; }
+/* switches, like 7 days / 30 days */
+.seg { display: inline-flex; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 2px; }
+.seg button { border: 0; background: transparent; color: var(--muted); font-size: 14px; padding: 8px 14px; border-radius: 999px;
+  min-height: 38px; cursor: pointer; }
 .seg button:hover { color: var(--ink); }
 .seg button[aria-pressed="true"] { background: var(--accent-tint); color: var(--ink); font-weight: 600; }
+.seg.small { background: var(--track); border: 0; }
+.seg.small button { font-size: 13px; padding: 6px 12px; min-height: 34px; }
+.seg.small button[aria-pressed="true"] { background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
 
 /* hover details */
 .tip { position: fixed; z-index: 10; max-width: 280px; pointer-events: none; background: var(--ink); color: #FFFFFF;

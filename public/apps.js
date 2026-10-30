@@ -1,19 +1,23 @@
 // public/apps.js
 //
-// The Apps page: every app ranked by time per day, for the last 7 days,
-// 30 days or all time, on any or all devices, each with its last two weeks
-// and its change from the period before. Click an app for its details.
+// The Apps page: every app by time per day, for the last 7 days, 30 days or
+// all time, on any or all devices, grouped by category (the colors you pick
+// on Organize). Each app shows its device, its last two weeks and its
+// change from the period before. Pick a category above the list to see
+// just that one; click an app for its details.
 // Loads /api/usage from the local server (server.mjs). Shared helpers are
 // in common.js.
 //
-// What you picked is kept in the address (#range=30&device=all&app=...),
-// so a reload or Refresh keeps it.
+// What you picked is kept in the address
+// (#range=30&device=all&cat=2&app=...), so a reload or Refresh keeps it.
 
 import { setupRefresh, showLastArchived } from "./refresh.js";
-import { DAY, loadUsage, esc, fmt, fmtDate, isoDay, todayIdx } from "./common.js";
+import {
+  DAY, loadUsage, esc, fmt, fmtDate, isoDay, todayIdx, UNTRACKED_KEY, categoryKeys, categoryColor, categoryName,
+} from "./common.js";
 
 const SESSION_GAP = 60;       // uses of the same app less than this apart count as one open
-const SHOW_FIRST = 15;        // apps listed before "Show all"
+const SHOW_FIRST = 5;         // apps listed in each category before "Show all"
 const SPARK_DAYS = 14;
 const MIN_COMPARE_DAYS = 3;   // compare with the period before only with this many days of data in it
 const NEW_BELOW_SECS = 60;    // under a minute a day before: the app counts as new
@@ -30,6 +34,11 @@ const nDev = DATA.devices.length;
 const appName = (app) => (app === UNTRACKED ? "Untracked" : DATA.apps[app].name);
 const appKey = (app) => (app === UNTRACKED ? "untracked" : DATA.apps[app].id);
 const dayOf = (secs) => Math.floor(secs / DAY);
+// The category key for an app index: its category, -1 for Other, or Untracked
+const catOf = (app) => (app === UNTRACKED ? UNTRACKED_KEY : DATA.apps[app].cat);
+const catColor = (key) => categoryColor(DATA, key);
+const catName = (key) => categoryName(DATA, key);
+const CAT_KEYS = categoryKeys(DATA);
 
 // ---------- the data ----------
 
@@ -59,18 +68,20 @@ const SESSIONS = (() => {
 
 // ---------- what you picked ----------
 
-const state = { range: "30", device: "all", app: null, showAll: false };
+const state = { range: "30", device: "all", cat: "all", app: null, showAll: false };
 
 function readAddress() {
   const params = new URLSearchParams(location.hash.slice(1));
   if (RANGES.some(([v]) => v === params.get("range"))) state.range = params.get("range");
   const device = params.get("device");
   if (device === "all" || (device !== null && DATA.devices[Number(device)] !== undefined)) state.device = device;
+  if (CAT_KEYS.some((k) => String(k) === params.get("cat"))) state.cat = params.get("cat");
   if (params.get("app")) state.app = params.get("app");
 }
 
 function writeAddress() {
   const params = new URLSearchParams({ range: state.range, device: state.device });
+  if (state.cat !== "all") params.set("cat", state.cat);
   if (state.app) params.set("app", state.app);
   history.replaceState(null, "", "#" + params);
 }
@@ -181,13 +192,27 @@ function renderFilters() {
     (v) => { state.device = v; state.showAll = false; render(); });
 }
 
-function sparkline(s, isGap) {
+// The category chips: All, then each category with time in the range, with
+// its time per day. Picking one shows only its apps.
+function renderChips(c) {
+  const totals = new Map();
+  for (const r of c.rows) totals.set(catOf(r.app), (totals.get(catOf(r.app)) ?? 0) + r.perDay);
+  const sum = [...totals.values()].reduce((a, b) => a + b, 0);
+  const chips = [["all", "All", "", sum]].concat(CAT_KEYS.filter((k) => totals.has(k))
+    .map((k) => [String(k), catName(k), catColor(k), totals.get(k)]));
+  document.getElementById("cat-filter").innerHTML = chips.map(([v, name, color, secs]) =>
+    '<button class="chip" data-v="' + esc(v) + '" aria-pressed="' + (v === state.cat) + '">' +
+    (color ? '<span class="swatch" style="background:' + color + '"></span>' : "") + esc(name) +
+    '<span class="chip-time">' + fmt(secs) + "</span></button>").join("");
+}
+
+function sparkline(s, color) {
   const vals = [];
   for (let d = todayIdx - SPARK_DAYS + 1; d <= todayIdx; d++) vals.push(s.byDay.get(d) ?? 0);
   const max = Math.max(...vals) || 1;
   const pts = vals.map((v, i) => ((i / (vals.length - 1)) * 140).toFixed(1) + "," + (29 - (v / max) * 26).toFixed(1)).join(" ");
-  return '<svg class="spark' + (isGap ? " gap" : "") + '" viewBox="0 0 140 32" preserveAspectRatio="none" aria-hidden="true">' +
-    '<polyline points="' + pts + '"></polyline></svg>';
+  return '<svg class="spark" viewBox="0 0 140 32" preserveAspectRatio="none" aria-hidden="true">' +
+    '<polyline points="' + pts + '" style="stroke:' + color + '"></polyline></svg>';
 }
 
 function changeCell(r) {
@@ -202,6 +227,8 @@ function changeCell(r) {
   return '<span class="change ' + (p > 0 ? "more" : "less") + '" data-tip="' + esc(tip) + '">' + (p > 0 ? "+" : "−") + Math.abs(p) + "%</span>";
 }
 
+// The list, grouped by category: a heading for each category (its color,
+// name, how many apps and its time per day), then its apps
 function renderList(c) {
   const total = c.rows.reduce((sum, r) => sum + r.perDay, 0);
   const apps = c.rows.filter((r) => r.app !== UNTRACKED).length;
@@ -211,32 +238,62 @@ function renderList(c) {
 
   const table = document.getElementById("app-table");
   const showAll = document.getElementById("show-all");
-  if (!c.rows.length) {
+  const rows = c.rows.filter((r) => state.cat === "all" || String(catOf(r.app)) === state.cat);
+  if (!rows.length) {
     table.innerHTML = '<p class="hint list-empty">Nothing recorded for this range and device.</p>';
     showAll.innerHTML = "";
     return;
   }
-  const shown = state.showAll ? c.rows : c.rows.slice(0, SHOW_FIRST);
-  let rank = 0;
+
+  // Categories by time per day, most first; Untracked last
+  const groups = new Map();
+  for (const r of rows) {
+    const key = catOf(r.app);
+    if (!groups.has(key)) groups.set(key, { key, rows: [], perDay: 0 });
+    groups.get(key).rows.push(r);
+    groups.get(key).perDay += r.perDay;
+  }
+  const ordered = [...groups.values()].sort((a, b) =>
+    (a.key === UNTRACKED_KEY) - (b.key === UNTRACKED_KEY) || b.perDay - a.perDay);
+  // With every category showing, each lists its top few until "Show all";
+  // with one picked, all its apps show
+  const limit = state.cat === "all" && !state.showAll ? SHOW_FIRST : Infinity;
+  let hidden = 0;
+
+  const line = (r, color) => {
+    const isGap = r.app === UNTRACKED;
+    const where = isGap ? "–" : [...r.devs].sort((a, b) => a - b).map((d) => DATA.devices[d]).join(", ");
+    return '<div class="app-line' + (appKey(r.app) === state.app ? " selected" : "") + '" data-key="' + esc(appKey(r.app)) + '">' +
+      "<span></span>" +
+      '<button class="app-who" aria-label="' + esc(appName(r.app) + ", " + fmt(r.perDay) + " a day. Show details") + '">' +
+      "<b>" + esc(appName(r.app)) + "</b>" + (isGap ? "<span>Screen on, no app recorded</span>" : "") + "</button>" +
+      '<span class="device">' + esc(where) + "</span>" +
+      sparkline(r, color) +
+      '<span class="num per-day">' + fmt(r.perDay) + "</span>" +
+      '<span class="num opens" data-tip="' + esc(isGap ? "Not counted for untracked time" : r.opens + " opens in all") + '">' +
+      (isGap ? "–" : r.opensPerDay >= 10 ? Math.round(r.opensPerDay) : r.opensPerDay.toFixed(1).replace(/\.0$/, "")) + "</span>" +
+      '<span class="num">' + changeCell(r) + "</span></div>";
+  };
+
   table.innerHTML =
-    '<div class="app-line head"><span>#</span><span>App</span><span class="col-spark">Last ' + SPARK_DAYS + ' days</span>' +
+    '<div class="app-line head"><span></span><span>App</span><span class="device">Device</span><span class="col-spark">Last ' + SPARK_DAYS + " days</span>" +
     '<span class="num">Per day</span><span class="num opens">Opens</span><span class="num">Change</span></div>' +
-    shown.map((r) => {
-      const isGap = r.app === UNTRACKED;
-      if (!isGap) rank++;
-      const where = isGap ? "Screen on, no app recorded" : [...r.devs].sort((a, b) => a - b).map((d) => DATA.devices[d]).join(" and ");
-      return '<div class="app-line' + (appKey(r.app) === state.app ? " selected" : "") + '" data-key="' + esc(appKey(r.app)) + '">' +
-        '<span class="rank">' + (isGap ? "" : rank) + "</span>" +
-        '<button class="app-who" aria-label="' + esc(appName(r.app) + ", " + fmt(r.perDay) + " a day. Show details") + '">' +
-        "<b>" + esc(appName(r.app)) + "</b><span>" + esc(where) + "</span></button>" +
-        sparkline(r, isGap) +
-        '<span class="num per-day">' + fmt(r.perDay) + "</span>" +
-        '<span class="num opens" data-tip="' + esc(isGap ? "Not counted for untracked time" : r.opens + " opens in all") + '">' +
-        (isGap ? "–" : r.opensPerDay >= 10 ? Math.round(r.opensPerDay) : r.opensPerDay.toFixed(1).replace(/\.0$/, "")) + "</span>" +
-        '<span class="num">' + changeCell(r) + "</span></div>";
+    ordered.map((g) => {
+      const color = catColor(g.key);
+      const appCount = g.rows.filter((r) => r.app !== UNTRACKED).length;
+      const shown = g.rows.slice(0, limit);
+      const more = g.rows.length - shown.length;
+      hidden += more;
+      return '<div class="group">' +
+        '<div class="group-head"><span class="stripe" style="background:' + color + '"></span>' +
+        "<span><b>" + esc(catName(g.key)) + "</b>" +
+        (g.key === UNTRACKED_KEY ? "" : '<span class="muted"> · ' + appCount + (appCount === 1 ? " app" : " apps") + "</span>") + "</span>" +
+        '<span class="group-time">' + fmt(g.perDay) + "</span></div>" +
+        '<div class="group-rows" style="--cat:' + color + '">' + shown.map((r) => line(r, color)).join("") +
+        (more ? '<button class="group-more" data-more>and ' + more + " more</button>" : "") + "</div></div>";
     }).join("");
-  showAll.innerHTML = c.rows.length > SHOW_FIRST
-    ? '<button class="show-all" id="show-all-button">' + (state.showAll ? "Show the top " + SHOW_FIRST : "Show all " + c.rows.length) + "</button>"
+  showAll.innerHTML = state.cat === "all" && (hidden || state.showAll)
+    ? '<button class="show-all" id="show-all-button">' + (state.showAll ? "Show the top " + SHOW_FIRST + " in each" : "Show all " + rows.length) + "</button>"
     : "";
 }
 
@@ -260,6 +317,7 @@ function renderDetail(c) {
   const isGap = r.app === UNTRACKED;
   const nDays = Math.max(1, c.days.length);
   const where = isGap ? "screen on, no app recorded" : "on " + [...r.devs].sort((a, b) => a - b).map((d) => DATA.devices[d]).join(" and ");
+  const color = catColor(catOf(r.app));
 
   const facts = [
     [isGap ? "Times a day" : "Opens a day", (r.opens / nDays).toFixed(1).replace(/\.0$/, "")],
@@ -292,8 +350,10 @@ function renderDetail(c) {
   }
   const first = fmtDate(c.start, { month: "short", day: "numeric" });
 
+  el.style.setProperty("--cat", color);
   el.innerHTML =
-    '<div class="detail-head"><span class="label">Selected</span><h2>' + esc(appName(r.app)) + "</h2>" +
+    '<div class="detail-head" style="--cat:' + color + '"><span class="label"><span class="swatch" style="background:' + color + '"></span>' +
+    esc(catName(catOf(r.app))) + "</span><h2>" + esc(appName(r.app)) + "</h2>" +
     '<span class="line">' + fmt(r.perDay) + " a day, " + esc(where) + "</span></div>" +
     '<div class="facts">' + facts.map(([label, value, tip]) =>
       '<div class="fact"' + (tip ? ' data-tip="' + esc(tip) + '"' : "") + "><span>" + esc(label) + "</span><b>" + esc(value) + "</b></div>").join("") + "</div>" +
@@ -307,9 +367,14 @@ function renderDetail(c) {
 function render() {
   const c = compute();
   // Keep the picked app if it's still listed, otherwise pick the top one
-  if (!c.rows.some((r) => appKey(r.app) === state.app)) state.app = c.rows.length ? appKey(c.rows[0].app) : null;
+  // (in the picked category, if there is one)
+  const listed = c.rows.filter((r) => state.cat === "all" || String(catOf(r.app)) === state.cat);
+  if (!listed.length && state.cat !== "all") state.cat = "all";
+  const pool = listed.length ? listed : c.rows;
+  if (!pool.some((r) => appKey(r.app) === state.app)) state.app = pool.length ? appKey(pool[0].app) : null;
   writeAddress();
   renderFilters();
+  renderChips(c);
   renderList(c);
   renderDetail(c);
 }
@@ -324,6 +389,18 @@ document.getElementById("app-table").addEventListener("click", (e) => {
   // When the details are below the list (narrow windows), bring them into view
   const detail = document.getElementById("detail");
   if (detail.getBoundingClientRect().top > window.innerHeight - 120) detail.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+document.getElementById("cat-filter").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-v]");
+  if (!b || b.dataset.v === state.cat) return;
+  state.cat = b.dataset.v;
+  state.showAll = false;
+  render();
+});
+document.getElementById("app-table").addEventListener("click", (e) => {
+  if (!e.target.closest("[data-more]")) return;
+  state.showAll = true;
+  render();
 });
 document.getElementById("show-all").addEventListener("click", (e) => {
   if (!e.target.closest("#show-all-button")) return;

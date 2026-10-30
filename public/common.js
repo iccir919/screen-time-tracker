@@ -60,7 +60,27 @@ export function fmtClock(secs) {
 export const localNow = () => Date.now() / 1000 - new Date().getTimezoneOffset() * 60;
 export const todayIdx = Math.floor(localNow() / DAY);
 
-export const devColor = (dev) => "var(--dev-" + ((dev % 3) + 1) + ")";
+// ---------- categories ----------
+// The data lists your categories in order, each with the color slot you
+// picked (0 to 7); an app's cat is an index into that list, or -1 for Other.
+// Untracked time isn't an app, so it gets its own key and gray stripes.
+
+export const UNTRACKED_KEY = "untracked";
+
+// All the category keys in display order: yours, then Other, then Untracked
+export const categoryKeys = (data) => data.categories.map((_, i) => i).concat([-1, UNTRACKED_KEY]);
+
+export function categoryColor(data, key) {
+  if (key === UNTRACKED_KEY) return "var(--untracked-stripes)";
+  if (key === -1 || !data.categories[key]) return "var(--cat-other)";
+  return "var(--cat-" + (data.categories[key].color + 1) + ")";
+}
+
+export function categoryName(data, key) {
+  if (key === UNTRACKED_KEY) return "Untracked";
+  if (key === -1 || !data.categories[key]) return "Other";
+  return data.categories[key].name;
+}
 
 // ---------- hover details ----------
 // Anything with data-tip shows it right away on hover, or on keyboard focus.

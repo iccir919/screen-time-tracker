@@ -1,14 +1,4 @@
-/* public/today.css: styles for the Today page (shared pieces are in base.css) */
-
-:root {
-  /* the 6-week calendar and the hours heatmap, least to most time */
-  --heat-1: #E6E7EA;
-  --heat-2: #CBCDD2;
-  --heat-3: #A6A9B1;
-  --heat-4: #7B7F89;
-  --heat-5: #4E525B;
-  --bar-soft: #B9BCC3;
-}
+/* public/today.css: styles for the Today page (shared pieces and colors are in base.css) */
 
 /* the date or range, with arrows, and the device switch */
 .range-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-top: 4px; }
@@ -16,29 +6,35 @@
 .day-nav { display: flex; align-items: center; gap: 10px; }
 .day-label { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: var(--ink); padding: 0 4px; }
 .date-short { display: none; }
-.round-button { width: 44px; height: 44px; flex: none; border-radius: 50%; border: 0; background: var(--surface);
-  color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
-  box-shadow: 0 0 0 1px var(--line); }
+.round-button { width: 44px; height: 44px; flex: none; border-radius: 50%; border: 1px solid var(--line); background: var(--surface);
+  color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .round-button svg { width: 20px; height: 20px; }
 .round-button:hover:not(:disabled) { background: var(--accent-tint); }
-.round-button:disabled { background: transparent; color: #B9BBC2; cursor: default; }
+.round-button:disabled { background: transparent; color: #C2C2C7; cursor: default; }
 
-/* the three cards: the day, the 7-day average, the 30-day average */
+/* the three cards: the day, the 7-day average, the 30-day average.
+   The chosen one has a dark outline. */
 .period-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
-.period-card { text-align: left; cursor: pointer; border: 0; border-radius: 20px; padding: 20px 22px; min-height: 160px;
-  display: flex; flex-direction: column; justify-content: space-between; gap: 10px;
-  background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
-.period-card:hover { box-shadow: inset 0 0 0 2px var(--accent-soft); }
-.period-card[aria-pressed="true"] { background: var(--ink); color: #FFFFFF; box-shadow: none; }
+.period-card { text-align: left; cursor: pointer; border: 1px solid var(--card-line); border-radius: 20px; padding: 20px 22px;
+  min-height: 170px; display: flex; flex-direction: column; justify-content: space-between; gap: 12px;
+  background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1px transparent; }
+.period-card:hover { border-color: #C8C8CD; }
+.period-card[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
 .period-card .label { font-size: 15px; font-weight: 600; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
-.period-card .label small { font-size: 13px; font-weight: 500; }
-.period-card[aria-pressed="true"] .label { color: #C9CBD1; }
+.period-card[aria-pressed="true"] .label { color: var(--ink); }
+.period-card .label small { font-size: 13px; font-weight: 500; color: var(--muted); }
 .period-card .value { font-size: clamp(40px, 7vw, 52px); font-weight: 800; letter-spacing: -0.04em; line-height: 1; }
 .period-card .value.none { font-size: 28px; color: var(--muted); }
-.period-card .split { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 14px; min-height: 1.5em; }
-.period-card[aria-pressed="true"] .split { color: #DADCE1; }
-.period-card .split span { display: inline-flex; align-items: center; gap: 6px; }
-.period-card[aria-pressed="true"] .dot.first { background: #FFFFFF !important; }
+/* the category mix under the number */
+.share { display: flex; gap: 2px; height: 8px; border-radius: 999px; overflow: hidden; background: var(--track); }
+.share span { display: block; min-width: 2px; }
+.period-card .split { font-size: 13px; color: var(--muted); white-space: pre-wrap; min-height: 1.5em; }
+
+/* the category colors, under the cards */
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; font-size: 13px; color: var(--ink-2); margin-top: -8px; }
+.legend:empty { display: none; }
+.legend > span { display: inline-flex; align-items: center; gap: 7px; }
+.legend-link { margin-left: auto; color: var(--muted); font-weight: 600; text-underline-offset: 3px; }
 
 .two-col { display: flex; flex-wrap: wrap; gap: 20px; }
 .two-col > .card { flex: 1 1 420px; }
@@ -50,41 +46,42 @@
 .lane-track.no-data { background: transparent; border: 1.5px dashed var(--empty); display: flex; align-items: center;
   justify-content: center; font-size: 13px; color: var(--muted); }
 .block { position: absolute; top: 5px; bottom: 5px; min-width: 2px; border-radius: 4px; }
-.block.gap { background: repeating-linear-gradient(135deg, var(--untracked) 0 3px, transparent 3px 6px); }
-.block:hover { filter: brightness(0.85); }
+.block.gap { background: var(--untracked-stripes); }
+.block:hover { filter: brightness(0.88); }
 .hours { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 14px; }
 .hours div { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
 
-/* timeline: an average day, minutes per hour, devices stacked */
+/* timeline: an average day, minutes per hour, stacked by category */
 .avg-day { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 14px; align-items: end; margin-bottom: 8px; }
-.hour-bars { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; align-items: end; height: 120px;
+.hour-bars { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; align-items: end; height: 140px;
   border-bottom: 1px solid var(--line); }
 .hour-bar { display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
-.hour-bar span { display: block; }
-.hour-bar span:first-child { border-radius: 2px 2px 0 0; }
-.hour-bar:hover span { filter: brightness(0.85); }
+.hour-bar .stack { display: flex; flex-direction: column-reverse; border-radius: 3px 3px 0 0; overflow: hidden; }
+.hour-bar .stack span { display: block; flex: none; }
+.hour-bar:hover .stack { filter: brightness(0.9); }
 
-/* top apps */
+/* top apps or categories */
 .app-row { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 2fr) 72px; gap: 14px; align-items: center; padding: 5px 0; }
 .app-name { display: flex; flex-direction: column; min-width: 0; }
 .app-name b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.app-name span { font-size: 13px; color: var(--muted); }
+.app-name span { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-time { font-weight: 600; text-align: right; }
 .more-link { display: inline-block; margin-top: 6px; font-size: 14px; font-weight: 600; text-underline-offset: 3px; }
 
-/* bars: 7 or 30 days */
+/* bars: 7 or 30 days, stacked by category */
 .bars-card #bars { flex: 1; display: flex; flex-direction: column; gap: 8px; }
 .bar-plot { position: relative; flex: 1; min-height: 200px; display: flex; align-items: flex-end; gap: 10px; border-bottom: 1px solid var(--line); }
 .bar-plot.many { gap: 3px; }
 .bar-col { flex: 1 1 0; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end;
   border: 0; background: none; padding: 0; cursor: pointer; }
-.bar-col .bar { width: 100%; border-radius: 8px 8px 2px 2px; background: var(--bar-soft); }
-.bar-plot.many .bar-col .bar { border-radius: 3px 3px 1px 1px; }
-.bar-col .bar.on { background: var(--accent); }
-.bar-col .bar.partial { background: repeating-linear-gradient(135deg, var(--bar-soft) 0 4px, #E2E3E7 4px 8px); }
-.bar-col .bar.on.partial { background: repeating-linear-gradient(135deg, var(--accent) 0 4px, #8E9199 4px 8px); }
-.bar-col .bar.none { height: 0 !important; border-top: 2px dashed var(--empty); border-radius: 0; background: none; }
-.bar-col:hover .bar:not(.none) { filter: brightness(0.9); }
+.bar-col .stack { width: 100%; display: flex; flex-direction: column-reverse; border-radius: 8px 8px 2px 2px; overflow: hidden;
+  transition: opacity 0.15s; }
+.bar-col .stack span { display: block; flex: none; }
+.bar-plot.many .bar-col .stack { border-radius: 3px 3px 1px 1px; }
+.bar-col .stack.faded { opacity: 0.45; }
+.bar-col .stack.partial { outline: 1.5px dashed var(--muted); outline-offset: 1px; }
+.bar-col .stack.none { height: 0 !important; border-top: 2px dashed var(--empty); border-radius: 0; }
+.bar-col:hover .stack:not(.none) { filter: brightness(0.92); opacity: 1; }
 .avg-line { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--ink); z-index: 1; pointer-events: none; }
 .avg-key { display: inline-block; width: 18px; border-top: 2px dashed var(--ink); vertical-align: middle; margin-right: 6px; }
 #bars-hint b { color: var(--ink); }
@@ -96,7 +93,7 @@
 .bar-labels .time { font-size: 13px; font-weight: 600; white-space: nowrap; }
 .bar-labels.many div { overflow: visible; }
 
-/* 6-week calendar */
+/* 6-week calendar (grays) */
 .calendar { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 10px; }
 .cal-weekdays { display: grid; grid-template-rows: repeat(7, minmax(0, 1fr)); gap: 8px; font-size: 12px; color: var(--muted); }
 .cal-weekdays span { display: flex; align-items: center; }
@@ -106,15 +103,15 @@
 .cal-day.empty { background: transparent; border: 1.5px dashed var(--empty); }
 .cal-day.future { visibility: hidden; }
 .cal-day.faded { opacity: 0.28; }
-.cal-day:hover { filter: brightness(0.9); }
-.cal-day.chosen { outline: 2px solid var(--ink); outline-offset: 1px; }
+.cal-day:hover { filter: brightness(0.92); }
+.cal-day.chosen { outline: 2px solid var(--ink); outline-offset: 2px; }
 .cal-months { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; font-size: 12px; color: var(--muted); }
 .cal-legend { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--muted); }
 .cal-legend span { display: flex; align-items: center; gap: 6px; }
 .cal-key { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
 .cal-key.empty { border: 1.5px dashed var(--empty); }
 
-/* hours of the week */
+/* hours of the week (grays) */
 .hour-grid { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 8px 10px; align-items: center; }
 .hour-day { font-size: 12px; color: var(--muted); }
 .hour-day.chosen { color: var(--ink); font-weight: 700; }
@@ -129,6 +126,7 @@
   .date-short { display: inline; }
   .period-cards { grid-template-columns: 1fr; gap: 10px; }
   .period-card { min-height: 0; padding: 16px 18px; }
+  .legend { margin-top: -4px; gap: 6px 14px; }
   .app-row { grid-template-columns: minmax(0, 1fr) 64px; }
   .app-row .bar-track { grid-column: 1 / -1; grid-row: 2; }
   .bar-plot, .bar-labels { gap: 4px; }

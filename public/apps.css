@@ -9,15 +9,24 @@
 .list-card { flex: 999 1 600px; padding: 8px 0 16px; gap: 0; }
 .detail { flex: 1 1 320px; gap: 20px; }
 
-/* the app list: one grid per row so the columns line up */
+/* category chips above the list */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; min-height: 40px; cursor: pointer; }
+.chip:hover { border-color: #C8C8CD; }
+.chip[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.chip .swatch { width: 10px; height: 10px; }
+.chip-time { font-weight: 500; color: var(--muted); }
+
+/* the app list, grouped by category: one grid per row so the columns line up */
 .table-scroll { overflow-x: auto; }
-.app-table { min-width: 600px; }
-.app-line { display: grid; grid-template-columns: 28px minmax(0, 1.6fr) minmax(0, 1.2fr) 84px 72px 72px; gap: 12px;
-  align-items: center; padding: 10px 24px; border-top: 1px solid var(--line); cursor: pointer; }
-.app-line.head { border-top: 0; cursor: default; font-size: 13px; color: var(--muted); padding-top: 14px; padding-bottom: 8px; }
+.app-table { min-width: 640px; }
+.app-line { display: grid; grid-template-columns: 6px minmax(0, 1.5fr) 96px minmax(0, 1.1fr) 84px 64px 64px; gap: 14px;
+  align-items: center; padding: 9px 24px; border-top: 1px solid var(--track); cursor: pointer; }
+.app-line.head { border-top: 0; cursor: default; font-size: 13px; color: var(--muted); padding-top: 14px; padding-bottom: 4px; }
 .app-line:not(.head):hover { background: var(--lane); }
 .app-line.selected { background: var(--accent-tint); }
-.app-line .rank { font-size: 14px; color: var(--muted); }
+.app-line .device { font-size: 13px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-line .num { text-align: right; }
 .app-line .per-day { font-weight: 600; }
 .app-line .opens { color: var(--ink-2); }
@@ -27,16 +36,25 @@
   color: inherit; cursor: pointer; }
 .app-who b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-who span { font-size: 13px; color: var(--muted); }
-.spark { width: 100%; height: 32px; display: block; }
-.spark polyline { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
-.spark.gap polyline { stroke: var(--dev-2); }
+.spark { width: 100%; height: 30px; display: block; }
+.spark polyline { fill: none; stroke-width: 2.2; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+
+.group-head { display: grid; grid-template-columns: 6px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 18px 24px 8px; }
+.group-head .stripe { width: 6px; height: 22px; border-radius: 3px; }
+.group-head b { font-size: 16px; font-weight: 700; }
+.group-head .muted { font-size: 14px; }
+.group-time { font-size: 16px; font-weight: 700; padding-right: 156px; }
+.group-more { display: block; margin: 0; border: 0; border-top: 1px solid var(--track); width: 100%; text-align: left; background: none;
+  padding: 9px 24px 9px 44px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.group-more:hover { color: var(--ink); background: var(--lane); }
 .show-all { margin: 12px 24px 0; border: 0; background: none; padding: 6px 0; font-size: 14px; font-weight: 600; color: var(--link);
   text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .list-empty { padding: 24px; }
 
 /* the selected app */
 .detail-head { display: flex; flex-direction: column; gap: 4px; }
-.detail-head .label { font-size: 13px; color: var(--muted); }
+.detail-head .label { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 7px; }
+.detail { --cat: var(--cat-other); }
 .detail-head h2 { font-size: 30px; font-weight: 800; letter-spacing: -0.025em; overflow-wrap: anywhere; }
 .detail-head .line { font-size: 15px; color: var(--ink-2); }
 .facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
@@ -45,20 +63,23 @@
 .fact b { font-size: 17px; font-weight: 700; line-height: 1.25; white-space: nowrap; }
 .detail h3 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
 .mini-bars { display: flex; align-items: flex-end; gap: 2px; height: 72px; }
-.mini-bars .b { flex: 1 1 0; min-width: 0; border-radius: 3px 3px 1px 1px; background: var(--accent); min-height: 2px; }
+.mini-bars .b { flex: 1 1 0; min-width: 0; border-radius: 3px 3px 1px 1px; background: var(--cat); min-height: 2px; }
 .mini-bars .b.zero { background: var(--track); }
 .mini-bars .b.none { background: none; border-top: 2px dashed var(--empty); border-radius: 0; height: 0 !important; min-height: 0; }
-.mini-bars .b.gap { background: repeating-linear-gradient(135deg, var(--untracked) 0 3px, #E2E3E7 3px 6px); }
-a.b:hover, .b:hover { filter: brightness(1.3); }
+.mini-bars .b.gap { background: var(--untracked-stripes); }
+a.b:hover, .b:hover { filter: brightness(0.88); }
 .mini-axis { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 4px; }
 .detail-link { font-size: 14px; font-weight: 600; text-underline-offset: 3px; }
 
 @media (max-width: 560px) {
-  /* narrow screens: keep the app, its time per day and its change; drop the
-     14-day line and opens so nothing has to scroll sideways */
+  /* narrow screens: keep the app, its device, its time per day and its
+     change; drop the 14-day line and opens so nothing scrolls sideways */
   .app-table { min-width: 0; }
-  .app-line { grid-template-columns: 22px minmax(0, 1fr) 72px 56px; gap: 10px; padding-left: 16px; padding-right: 16px; }
+  .app-line { grid-template-columns: 0 minmax(0, 1fr) 64px 64px 52px; gap: 8px; padding-left: 16px; padding-right: 16px; }
   .app-line .spark, .app-line .col-spark, .app-line .opens { display: none; }
+  .group-head { padding-left: 16px; padding-right: 16px; gap: 10px; }
+  .group-time { padding-right: 60px; }
+  .group-more { padding-left: 16px; }
   .show-all { margin-left: 16px; }
   .facts { gap: 6px; }
   .fact b { font-size: 16px; }

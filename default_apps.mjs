@@ -6,11 +6,10 @@
 // in your archive database, never in this file, and they take priority
 // over these defaults.
 
-// The colors you can pick for a category. Each has a light-mode and a
-// dark-mode shade (--cat-1 to --cat-8 in public/styles.css), chosen so any
-// two are easy to tell apart, including with color blindness. Categories
-// can share a color.
-export const COLOR_NAMES = ["Blue", "Orange", "Aqua", "Yellow", "Pink", "Green", "Violet", "Red"];
+// The colors you can pick for a category, in order. The shades are
+// --cat-1 to --cat-10 in public/base.css: soft colors, chosen so any two are
+// easy to tell apart. Categories can share a color.
+export const COLOR_NAMES = ["Blue", "Orange", "Aqua", "Yellow", "Pink", "Green", "Violet", "Red", "Sky", "Brown"];
 
 // "Other" is always there, always gray, and can't be renamed or deleted
 export const OTHER_ID = "other";
