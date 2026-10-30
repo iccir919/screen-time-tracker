@@ -187,7 +187,7 @@ function renderRangeBar() {
 
 function renderCards() {
   const cards = PERIODS.map((p) => {
-    let label, small = "", value, split;
+    let label, small = "", note = "", value, split;
     if (p === "day") {
       const n = dayName(state.day, false);
       label = n.relative || n.date;
@@ -197,7 +197,8 @@ function renderCards() {
       const { from, to } = periodWindow(p);
       const days = periodDays(p);
       label = p + "-day average";
-      small = rangeText(from, to) + (days.length && days.length < Number(p) ? " · " + days.length + " days with data" : "");
+      small = rangeText(from, to);
+      if (days.length && days.length < Number(p)) note = days.length + " of " + p + " days with data";
       const avg = average(days, total);
       value = avg === null ? null : fmt(avg);
       split = devs.map((dev) => {
@@ -209,9 +210,14 @@ function renderCards() {
     return '<button class="period-card" data-period="' + p + '" aria-pressed="' + (p === state.period) + '">' +
       '<span class="label"><span>' + esc(label) + "</span><small>" + esc(small) + "</small></span>" +
       '<span class="value' + (value === null ? " none" : "") + '">' + (value ?? "No data") + "</span>" +
-      '<span class="split">' + split.map(([dev, text], i) =>
+      // The split only helps with more than one device; with one it would
+      // repeat the big number. The bottom line is always there (empty if
+      // need be) so the card keeps its height, and also holds the note on
+      // how many days had data.
+      '<span class="split">' + (devs.length < 2 ? "" : split.map(([dev, text], i) =>
         '<span><span class="dot' + (i === 0 ? " first" : "") + '" style="background:' + devColor(dev) + '"></span>' +
-        esc(DATA.devices[dev] + " " + text) + "</span>").join("") + "</span></button>";
+        esc(DATA.devices[dev] + " " + text) + "</span>").join("")) +
+      (note ? '<span class="note">' + esc(note) + "</span>" : "") + "</span></button>";
   });
   document.getElementById("period-cards").innerHTML = cards.join("");
 }

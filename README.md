@@ -60,7 +60,7 @@ It has three pages:
 - **Apps**: every app ranked by time per day, for the last 7 days, 30 days or all time, on any or all devices, with its last 14 days and its change from the period before. Click an app for its opens, typical and longest session, when during the day you use it, and each day (click a day to open it on the Today page).
 - **Organize**: your categories and app names (see below).
 
-Averages count only days with data, and leave out today while it's still going, so a morning doesn't pull them down. The cards say which dates they cover, and how many of those days have data when some don't.
+Averages count only days with data, and leave out today while it's still going, so a morning doesn't pull them down. The cards say which dates they cover, and, when some days have no data, how many do ("27 of 30 days with data").
 
 The pages need no libraries and work without internet. Only the typeface (Plus Jakarta Sans, from Google Fonts) needs it; offline, they use your system font.
 
