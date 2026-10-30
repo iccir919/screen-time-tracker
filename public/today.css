@@ -93,19 +93,24 @@
 .bar-labels .time { font-size: 13px; font-weight: 600; white-space: nowrap; }
 .bar-labels.many div { overflow: visible; }
 
-/* 6-week calendar (grays) */
-.calendar { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 10px; }
-.cal-weekdays { display: grid; grid-template-rows: repeat(7, minmax(0, 1fr)); gap: 8px; font-size: 12px; color: var(--muted); }
-.cal-weekdays span { display: flex; align-items: center; }
-.cal-weeks { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
-.cal-week { display: grid; grid-template-rows: repeat(7, minmax(0, 1fr)); gap: 8px; }
-.cal-day { height: 32px; width: 100%; border-radius: 8px; border: 0; padding: 0; cursor: pointer; transition: opacity 0.15s; }
-.cal-day.empty { background: transparent; border: 1.5px dashed var(--empty); }
-.cal-day.future { visibility: hidden; }
-.cal-day.faded { opacity: 0.28; }
-.cal-day:hover { filter: brightness(0.92); }
-.cal-day.chosen { outline: 2px solid var(--ink); outline-offset: 2px; }
-.cal-months { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; font-size: 12px; color: var(--muted); }
+/* week by week: a line through each week's average, with a gray band
+   from its lightest day to its heaviest */
+#weeks { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+#weeks .bar-labels { gap: 0; }
+.week-plot { position: relative; flex: 1; min-height: 200px; margin-top: 8px; border-bottom: 1px solid var(--line); }
+.week-col { position: absolute; top: 0; bottom: 0; border: 0; background: none; padding: 0; cursor: pointer; border-radius: 10px; }
+.week-col:hover { background: var(--lane); }
+.week-band { position: absolute; left: 50%; width: 18px; margin-left: -9px; min-height: 6px; border-radius: 9px; background: rgba(0, 0, 0, 0.08); }
+.week-col.chosen .week-band { background: rgba(0, 0, 0, 0.16); }
+.week-dot { position: absolute; left: 50%; z-index: 2; width: 12px; height: 12px; margin: 0 0 -6px -6px; border-radius: 50%; background: var(--ink); }
+.week-dot.so-far { background: var(--surface); box-shadow: inset 0 0 0 2px var(--ink); }
+.week-col.chosen .week-dot { outline: 2px solid var(--ink); outline-offset: 3px; }
+.week-line { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.week-line path { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.week-line path.so-far { stroke-dasharray: 1 6; }
+.bar-labels .time small { display: block; text-align: center; font-size: 11px; font-weight: 500; color: var(--muted); line-height: 1.2; }
+
+/* legend under the hours of the week */
 .cal-legend { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--muted); }
 .cal-legend span { display: flex; align-items: center; gap: 6px; }
 .cal-key { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
@@ -136,5 +141,5 @@
   .hour-bars { gap: 1px; }
   .hour-row { gap: 2px; }
   .hour-cell { height: 20px; border-radius: 2px; }
-  .cal-day { height: 26px; }
+  .week-plot { min-height: 160px; }
 }

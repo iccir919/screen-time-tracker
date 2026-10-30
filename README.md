@@ -56,11 +56,11 @@ PORT=4000 npm start      # use another port
 
 It has three pages:
 
-- **Today** (the home page): three cards at the top show the day, the 7-day average and the 30-day average, each with a bar of its categories and split by device. Click a card and the whole page follows it: the timeline (the day, or an average day by hour), the top apps or categories (that day, or per day on average), the bar chart (7 or 30 days with the average drawn in), the 6-week calendar and the hours of the week. The arrows move back and forward by a day, 7 days or 30 days, and clicking a day in the chart or the calendar shows that day. The device switch (all devices, iPhone or Mac) applies to everything.
+- **Today** (the home page): three cards at the top show the day, the 7-day average and the 30-day average, each with a bar of its categories and split by device. Click a card and the whole page follows it: the timeline (the day, or an average day by hour), the top apps or categories (that day, or per day on average), the bar chart (7 or 30 days with the average drawn in) and the hours of the week. The arrows move back and forward by a day, 7 days or 30 days, and clicking a day in the bar chart shows that day. Below, **Week by week** is a line through each of the last 6 weeks' daily average (this week so far), with a gray band from each week's lightest day to its heaviest; hover for the details, click a week to see it. The device switch (all devices, iPhone or Mac) applies to everything.
 - **Apps**: every app by time per day, for the last 7 days, 30 days or all time, on any or all devices, grouped by category. Each app shows its device, its last 14 days and its change from the period before. Pick a category above the list to see only its apps. Click an app for its opens, typical and longest session, when during the day you use it, and each day (click a day to open it on the Today page).
 - **Organize**: your categories and app names, with each one's time per day (see below).
 
-Color always means category: the color you pick for each one on Organize. Amounts without a category, like the calendar and the hours of the week, are in grays.
+Color always means category: the color you pick for each one on Organize. Amounts without a category, like the hours of the week, are in grays.
 
 Averages count only days with data, and leave out today while it's still going, so a morning doesn't pull them down. The cards say which dates they cover, and, when some days have no data, how many do ("27 of 30 days with data").
 

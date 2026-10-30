@@ -4,11 +4,12 @@
 // the 30-day average. Pick one and the whole page follows it: the timeline
 // (the day, or an average day by hour), the top apps or categories (that
 // day, or per day on average), the bar chart (7 or 30 days, with the
-// average drawn in), the 6-week calendar and the hours of the week.
+// average drawn in), the hours of the week, and the week-by-week chart,
+// which stays the same and outlines the week you're looking at.
 // Everything also follows the device switch.
 //
 // Color means category everywhere (the colors you pick on Organize);
-// amounts with no category, like the calendar, are in grays.
+// amounts with no category, like the hours of the week, are in grays.
 //
 // Loads /api/usage from the local server (server.mjs); shared helpers are
 // in common.js. The address keeps what you picked:
@@ -23,7 +24,7 @@ import {
 
 const SESSION_GAP = 60;          // uses of the same app less than this apart count as one open
 const MAX_TOP_ROWS = 8;
-const CALENDAR_WEEKS = 6;
+const WEEKS_SHOWN = 6;
 const UNTRACKED = -1;            // stands in for an app index for untracked time
 const PERIODS = ["day", "7", "30"];
 const MON_FIRST = [1, 2, 3, 4, 5, 6, 0]; // weekday numbers in Monday-first order
@@ -92,10 +93,11 @@ for (const [dev, start, end, hint] of DATA.gaps) {
 
 const firstDay = byDay.size ? Math.min(...byDay.keys()) : todayIdx;
 
-// The calendar's first day: a Monday, 5 weeks before this week's Monday.
-// You can go back to it or to your first day of data, whichever is earlier.
-const calendarStart = todayIdx - (weekdayOf(todayIdx) + 6) % 7 - (CALENDAR_WEEKS - 1) * 7;
-const lowestDay = Math.min(firstDay, calendarStart);
+// The week-by-week chart's first day: a Monday, 5 weeks before this week's
+// Monday. You can go back to it or to your first day of data, whichever is earlier.
+const mondayOf = (day) => day - (weekdayOf(day) + 6) % 7;
+const weeksStart = mondayOf(todayIdx) - (WEEKS_SHOWN - 1) * 7;
+const lowestDay = Math.min(firstDay, weeksStart);
 const clampDay = (d) => Math.max(lowestDay, Math.min(todayIdx, d));
 
 // ---------- what you picked ----------
@@ -113,11 +115,9 @@ const state = { day: todayIdx, period: "day", device: "all", view: "apps" };
 }
 
 let devs = []; // the chosen devices, as indexes
-let heatStepsCache = null;
 
 function setDevices() {
   devs = state.device === "all" ? DATA.devices.map((_, i) => i) : [Number(state.device)];
-  heatStepsCache = null;
 }
 
 function writeAddress() {
@@ -460,7 +460,83 @@ function renderBars() {
     (anyPartial ? '<p class="hint">Dashed outline: missing data from a device.</p>' : "");
 }
 
-// ---------- the 6-week calendar and the hours of the week (grays) ----------
+// ---------- week by week: a line through each week's daily average ----------
+
+// One dot per week, Monday to Sunday, this week last: the week's daily
+// average over the days with data. The gray band behind each dot runs from
+// the week's lightest day to its heaviest, so you can see how steady it was.
+// This week's dot is hollow and leaves today out while it's going. The
+// dashed line is the average over all six weeks. The chart never changes
+// with the cards; the week holding the day you're looking at is outlined.
+function renderWeeks() {
+  const thisMonday = mondayOf(todayIdx);
+  const weeks = [];
+  for (let w = 0; w < WEEKS_SHOWN; w++) {
+    const from = weeksStart + w * 7;
+    const to = Math.min(from + 6, todayIdx - 1);
+    const days = [];
+    for (let d = from; d <= to; d++) if (anyData(d)) days.push(d);
+    const totals = days.map(total);
+    weeks.push({
+      from, days, current: from === thisMonday, avg: average(days, total),
+      low: days.length ? days[totals.indexOf(Math.min(...totals))] : null,
+      high: days.length ? days[totals.indexOf(Math.max(...totals))] : null,
+      cats: categoryTotals(days),
+    });
+  }
+  const overall = average(weeks.flatMap((w) => w.days), total);
+  const chosen = mondayOf(state.day);
+  document.getElementById("weeks-hint").innerHTML = '<span class="avg-key"></span>6-week average ' +
+    (overall === null ? "–" : "<b>" + fmt(overall) + "</b>");
+
+  const top = Math.max(3600, overall ?? 0, ...weeks.filter((w) => w.high !== null).map((w) => total(w.high))) * 1.08;
+  const pct = (secs) => (secs / top) * 100;
+  const short = (d) => fmtDate(d, { month: "short", day: "numeric" });
+  const dayText = (d) => fmtDate(d, { weekday: "short" }) + " " + fmt(total(d));
+
+  // The line: solid between finished weeks, dotted into this week, with a
+  // break wherever a week has no data
+  const x = (i) => ((i + 0.5) * 100).toFixed(1);
+  const y = (w) => (100 - pct(w.avg)).toFixed(2);
+  let solid = "", soFar = "";
+  weeks.forEach((w, i) => {
+    if (w.avg === null) return;
+    const prev = weeks[i - 1];
+    const joined = prev && prev.avg !== null;
+    if (w.current) { if (joined) soFar = "M" + x(i - 1) + " " + y(prev) + " L" + x(i) + " " + y(w); }
+    else solid += (joined ? " L" : " M") + x(i) + " " + y(w);
+  });
+
+  const cols = weeks.map((w, i) => {
+    const range = w.current ? short(w.from) + " to today" : rangeText(w.from, w.from + 6);
+    const tip = [range + (w.current ? " (so far)" : "") + ": " + (w.avg === null ? "no data" : fmt(w.avg) + " a day")]
+      .concat(w.avg === null ? [] : ["Lightest: " + dayText(w.low), "Heaviest: " + dayText(w.high)])
+      .concat(categoryLines(w.cats, 60).slice(0, 3))
+      .concat([w.current ? "Click to see the last 7 days" : "Click to see this week"]).join("\n");
+    // Clicking shows the week as a 7-day period: it ends on the Sunday, or
+    // for this week on today (which shows the 7 full days before it)
+    const end = w.current ? todayIdx : w.from + 6;
+    const marks = w.avg === null ? "" :
+      '<span class="week-band" style="bottom:' + pct(total(w.low)).toFixed(2) + "%;height:" +
+      (pct(total(w.high)) - pct(total(w.low))).toFixed(2) + '%"></span>' +
+      '<span class="week-dot' + (w.current ? " so-far" : "") + '" style="bottom:' + pct(w.avg).toFixed(2) + '%"></span>';
+    return '<button class="week-col' + (w.from === chosen ? " chosen" : "") + '" style="left:' + (i * 100 / WEEKS_SHOWN).toFixed(3) +
+      "%;width:" + (100 / WEEKS_SHOWN).toFixed(3) + '%" data-week-end="' + end + '" data-tip="' + esc(tip) +
+      '" aria-label="' + esc(range + ": " + (w.avg === null ? "no data" : fmt(w.avg) + " a day")) + '">' + marks + "</button>";
+  });
+  const labels = weeks.map((w) =>
+    '<div><span class="label' + (w.from === chosen ? " on" : "") + '">' + (w.current ? "This week" : esc(short(w.from))) + "</span>" +
+    '<span class="time">' + (w.avg === null ? "–" : fmt(w.avg)) + (w.current && w.avg !== null ? "<small>so far</small>" : "") + "</span></div>");
+  document.getElementById("weeks").innerHTML =
+    '<div class="week-plot">' + cols.join("") +
+    '<svg class="week-line" viewBox="0 0 ' + WEEKS_SHOWN * 100 + ' 100" preserveAspectRatio="none" aria-hidden="true">' +
+    '<path d="' + solid.trim() + '"></path><path class="so-far" d="' + soFar + '"></path></svg>' +
+    (overall === null ? "" : '<div class="avg-line" style="bottom:' + pct(overall).toFixed(1) + '%"></div>') +
+    "</div>" +
+    '<div class="bar-labels">' + labels.join("") + "</div>";
+}
+
+// ---------- the hours of the week (grays) ----------
 
 // Shades come from your own values, so they show your lighter and heavier
 // days (or hours) whatever your usual amount is: each shade is about a fifth
@@ -486,61 +562,13 @@ function legendKeys(steps) {
     '"></span>').join("");
 }
 
-function dayHeatSteps() {
-  if (!heatStepsCache) {
-    heatStepsCache = quintileSteps([...byDay.keys()].filter(anyData).map(total), 1800, [2, 4, 6, 8].map((h) => h * 3600));
-  }
-  return heatStepsCache;
-}
-
-function renderCalendar() {
-  const steps = dayHeatSteps();
-  const isDay = state.period === "day";
-  const win = periodWindow(state.period);
-  document.getElementById("calendar-hint").textContent = isDay ? "Click a day to see it" : "The period is in full color";
-  const cols = [];
-  const months = [];
-  for (let w = 0; w < CALENDAR_WEEKS; w++) {
-    const colStart = calendarStart + w * 7;
-    const month = fmtDate(colStart, { month: "short" });
-    months.push(w === 0 || month !== fmtDate(colStart - 7, { month: "short" }) ? month : "");
-    let cells = "";
-    for (let i = 0; i < 7; i++) {
-      const d = colStart + i;
-      if (d > todayIdx) {
-        cells += '<span class="cal-day future" aria-hidden="true"></span>';
-        continue;
-      }
-      const label = fmtDate(d, { weekday: "short", month: "short", day: "numeric" });
-      const extra = (isDay && d === state.day ? " chosen" : "") + (!isDay && (d < win.from || d > win.to) ? " faded" : "");
-      if (!anyData(d)) {
-        cells += '<button class="cal-day empty' + extra + '" data-day="' + d + '" data-tip="' + esc(label + "\nNo data") +
-          '" aria-label="' + esc(label + ": no data") + '"></button>';
-      } else {
-        const text = label + "\n" + fmt(total(d)) + (complete(d) ? "" : "\nMissing data from a device");
-        cells += '<button class="cal-day' + extra + '" data-day="' + d + '" style="background:var(--heat-' + heatLevel(total(d), steps) +
-          ')" data-tip="' + esc(text) + '" aria-label="' + esc(text.replace(/\n/g, ", ")) + '"></button>';
-      }
-    }
-    cols.push('<div class="cal-week">' + cells + "</div>");
-  }
-  document.getElementById("calendar").innerHTML =
-    '<div class="calendar">' +
-    '<div class="cal-weekdays"><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span>Sun</span></div>' +
-    '<div class="cal-weeks">' + cols.join("") + "</div>" +
-    "<span></span>" +
-    '<div class="cal-months">' + months.map((m) => "<span>" + esc(m) + "</span>").join("") + "</div>" +
-    "</div>" +
-    '<div class="cal-legend"><span><span class="cal-key empty"></span>No data</span><span>less ' + legendKeys(steps) + " more</span></div>";
-}
-
 // Weekday by hour: the average time in each hour. For a day, over the last
 // 6 weeks (today left out while it's going); for 7 or 30 days, over the period.
 function renderHours() {
   const isDay = state.period === "day";
   const days = [];
   if (isDay) {
-    for (let d = Math.max(calendarStart, firstDay); d < todayIdx; d++) if (anyData(d)) days.push(d);
+    for (let d = Math.max(weeksStart, firstDay); d < todayIdx; d++) if (anyData(d)) days.push(d);
   } else {
     days.push(...periodDays(state.period));
   }
@@ -601,13 +629,17 @@ document.getElementById("view-switch").addEventListener("click", (e) => {
   if (b) update({ view: b.dataset.view });
 });
 
-// Clicking a day in the bars or the calendar shows that day
-for (const id of ["bars", "calendar"]) {
-  document.getElementById(id).addEventListener("click", (e) => {
-    const target = e.target.closest("[data-day]");
-    if (target) update({ day: Number(target.dataset.day), period: "day" });
-  });
-}
+// Clicking a day in the bars shows that day
+document.getElementById("bars").addEventListener("click", (e) => {
+  const target = e.target.closest("[data-day]");
+  if (target) update({ day: Number(target.dataset.day), period: "day" });
+});
+
+// Clicking a week shows it as a 7-day period
+document.getElementById("weeks").addEventListener("click", (e) => {
+  const target = e.target.closest("[data-week-end]");
+  if (target) update({ day: Number(target.dataset.weekEnd), period: "7" });
+});
 
 document.getElementById("device-filter").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-v]");
@@ -625,7 +657,7 @@ function render() {
   renderTimeline();
   renderTopList();
   renderBars();
-  renderCalendar();
+  renderWeeks();
   renderHours();
 }
 
