@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="base.css">
 <link rel="stylesheet" href="today.css">
 </head>
 <body>
@@ -29,27 +30,25 @@
   <p class="notice error" id="refresh-error" hidden></p>
 
   <div id="content">
-    <section class="hero">
-      <div class="hero-main">
-        <div class="day-nav">
-          <button class="round-button" id="prev-day" aria-label="Previous day">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
-          </button>
-          <h1 class="day-label" id="day-label"></h1>
-          <button class="round-button" id="next-day" aria-label="Next day">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
-          </button>
-        </div>
-        <div class="day-total" id="day-total"></div>
-        <p class="day-compare" id="day-compare"></p>
+    <div class="range-bar">
+      <div class="day-nav">
+        <button class="round-button" id="prev" aria-label="Earlier">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <h1 class="day-label" id="range-label"></h1>
+        <button class="round-button" id="next" aria-label="Later">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+        </button>
       </div>
-      <div class="device-cards" id="device-cards"></div>
-    </section>
+      <div class="seg" id="device-filter" role="group" aria-label="Devices"></div>
+    </div>
+
+    <div class="period-cards" id="period-cards" role="group" aria-label="Period"></div>
 
     <section class="card">
       <div class="card-head">
-        <h2>Through the day</h2>
-        <span class="hint">Hover over a block for the app and time. Gray stripes: screen on, no app recorded.</span>
+        <h2 id="timeline-title">Through the day</h2>
+        <span class="hint" id="timeline-hint"></span>
       </div>
       <div id="timeline"></div>
     </section>
@@ -57,30 +56,38 @@
     <div class="two-col">
       <section class="card">
         <div class="card-head">
-          <h2>Where the time went</h2>
-          <a class="card-link" href="/apps">All apps</a>
+          <h2 id="apps-title">Where the time went</h2>
+          <a class="card-link" id="apps-link" href="/apps">All apps</a>
         </div>
-        <p class="hint" id="apps-hint"></p>
         <div id="top-apps"></div>
+      </section>
+
+      <section class="card bars-card">
+        <div class="card-head">
+          <h2 id="bars-title">Last 7 days</h2>
+          <span class="hint" id="bars-hint"></span>
+        </div>
+        <div id="bars"></div>
+      </section>
+    </div>
+
+    <div class="two-col">
+      <section class="card">
+        <div class="card-head">
+          <h2>Every day, last 6 weeks</h2>
+          <span class="hint" id="calendar-hint"></span>
+        </div>
+        <div id="calendar"></div>
       </section>
 
       <section class="card">
         <div class="card-head">
-          <h2>This week</h2>
-          <span class="hint" id="week-average"></span>
+          <h2>Hours of the week</h2>
+          <span class="hint" id="hours-hint"></span>
         </div>
-        <div class="week" id="week"></div>
-        <p class="hint" id="week-note"></p>
+        <div id="hours-heatmap"></div>
       </section>
     </div>
-
-    <section class="card">
-      <div class="card-head">
-        <h2>Every day, last 12 weeks</h2>
-        <span class="hint">Darker means more time. Click a day to see it.</span>
-      </div>
-      <div id="calendar"></div>
-    </section>
   </div>
 </main>
 <div class="tip" id="tip" role="tooltip" hidden></div>

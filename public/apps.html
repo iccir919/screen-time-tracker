@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Screen Time: Apps</title>
+<!-- The page's typeface. Without internet it falls back to the system font. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="apps.css">
+</head>
+<body>
+<main class="page">
+  <header class="topbar">
+    <div class="brand-nav">
+      <div class="brand">Screen Time</div>
+      <nav class="tabs" aria-label="Pages">
+        <a href="/">Today</a>
+        <a href="/apps" aria-current="page">Apps</a>
+        <a href="/organize">Organize</a>
+      </nav>
+    </div>
+    <div class="refresh">
+      <span class="refresh-note" id="refresh-note" aria-live="polite"></span>
+      <button class="button" id="refresh" title="Save new Screen Time data now (the same as npm run archive)">Refresh</button>
+    </div>
+  </header>
+  <p class="notice error" id="refresh-error" hidden></p>
+
+  <div id="content">
+    <section class="apps-head">
+      <div>
+        <h1>Your apps</h1>
+        <p class="summary" id="summary"></p>
+      </div>
+      <div class="filters">
+        <div class="seg" id="range-filter" role="group" aria-label="Date range"></div>
+        <div class="seg" id="device-filter" role="group" aria-label="Devices"></div>
+      </div>
+    </section>
+
+    <div class="apps-layout">
+      <section class="card list-card">
+        <div class="table-scroll">
+          <div class="app-table" id="app-table"></div>
+        </div>
+        <div id="show-all"></div>
+      </section>
+
+      <aside class="card detail" id="detail" aria-live="polite"></aside>
+    </div>
+  </div>
+</main>
+<div class="tip" id="tip" role="tooltip" hidden></div>
+<script type="module" src="apps.js"></script>
+</body>
+</html>

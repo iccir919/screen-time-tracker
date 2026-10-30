@@ -1,95 +1,40 @@
 // public/today.js
 //
-// The Today page: one day at a time (today unless you pick another), with
-// its total, each device, a timeline, the top apps, the week around it and
-// a 12-week calendar, each compared with your usual for that weekday.
-// Loads /api/usage from the local server (server.mjs).
+// The Today page. Three cards at the top: the day, the 7-day average and
+// the 30-day average. Pick one and the whole page follows it: the timeline
+// (the day, or an average day by hour), the top apps (that day, or per day
+// on average), the bar chart (7 or 30 days, with the average drawn in), the
+// 6-week calendar and the hours of the week. Everything also follows the
+// device switch. Loads /api/usage from the local server (server.mjs);
+// shared helpers are in common.js.
 //
-// Times in the data are seconds in your local time zone (shifted so that
-// day = Math.floor(seconds / 86400)), so they're read with UTC methods.
+// The address keeps what you picked: #day=2026-10-26&period=7&device=0
+// (no day means today, no period means the day, no device means all).
 
 import { setupRefresh, showLastArchived } from "./refresh.js";
+import {
+  DAY, WEEKDAYS, loadUsage, esc, fmt, dateOf, fmtDate, weekdayOf, isoDay, dayFromIso, fmtClock,
+  todayIdx, devColor, hideTip,
+} from "./common.js";
 
-const DAY = 86400;
 const SESSION_GAP = 60;          // uses of the same app less than this apart count as one open
 const MAX_TOP_APPS = 8;
-const USUAL_MIN_DAYS = 3;        // compare with "your usual" only with at least this many days
-const USUAL_MAX_DAYS = 8;        // ...and at most this many (about two months)
-const ABOUT_THE_SAME_SECS = 5 * 60;
-const MOSTLY_SHARE = 0.6;        // "mostly iPhone" when one device made up this much of the change
-const SHOW_CHANGE_SECS = 60;     // app changes smaller than this aren't shown
-const DOWN_FROM_USUAL_SECS = 10 * 60;
+const CALENDAR_WEEKS = 6;
 const UNTRACKED = -1;            // stands in for an app index for untracked time
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const PERIODS = ["day", "7", "30"];
+const MON_FIRST = [1, 2, 3, 4, 5, 6, 0]; // weekday numbers in Monday-first order
 
-setupRefresh(); // the chosen day is in the address (#2026-10-26), so a reload keeps it
+setupRefresh(); // what you picked is in the address, so a reload keeps it
 
-const DATA = await loadData();
+const DATA = await loadUsage();
 if (!DATA) throw new Error("Data didn't load (the message is on the page).");
 showLastArchived(DATA.lastArchived);
 
-async function loadData() {
-  try {
-    const res = await fetch("/api/usage");
-    const body = await res.json();
-    if (!res.ok) throw new Error(body.error ?? "The server returned an error.");
-    return body;
-  } catch (err) {
-    const msg = err instanceof TypeError ? "Can't reach the dashboard server. Is npm start still running?" : err.message;
-    document.getElementById("content").innerHTML =
-      '<div class="notice empty-state"><b>Nothing to show yet</b><span id="load-error"></span></div>';
-    document.getElementById("load-error").textContent = msg;
-    return null;
-  }
-}
-
-// ---------- formatting ----------
-
-function esc(s) {
-  return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-}
-
-function fmt(secs) {
-  const mins = Math.round(secs / 60);
-  if (secs > 0 && mins < 1) return "<1m";
-  const h = Math.floor(mins / 60), m = mins % 60;
-  return h ? h + "h " + String(m).padStart(2, "0") + "m" : m + "m";
-}
-
-// "▲ 32m" or "▼ 7m", with a class for its color
-function changeHtml(diff, suffix = "") {
-  return '<span class="' + (diff < 0 ? "less" : "more") + '">' + (diff < 0 ? "▼ " : "▲ ") + fmt(Math.abs(diff)) + "</span>" + suffix;
-}
-
-const dateOf = (day) => new Date(day * DAY * 1000);
-const fmtDate = (day, options) => dateOf(day).toLocaleDateString("en-US", { timeZone: "UTC", ...options });
-const weekdayOf = (day) => (day + 4) % 7; // 0 = Sunday (day 0 was a Thursday)
-const isoDay = (day) => dateOf(day).toISOString().slice(0, 10);
-const dayFromIso = (text) =>
-  /^\d{4}-\d{2}-\d{2}$/.test(text) ? Math.floor(Date.parse(text + "T00:00:00Z") / 1000 / DAY) : null;
-
-function fmtClock(secs) {
-  const d = new Date(secs * 1000);
-  const h = d.getUTCHours(), m = d.getUTCMinutes();
-  return (h % 12 || 12) + ":" + String(m).padStart(2, "0") + (h < 12 ? "am" : "pm");
-}
-
-const devColor = (dev) => "var(--dev-" + ((dev % 3) + 1) + ")";
 const appName = (app) => (app === UNTRACKED ? "Untracked" : DATA.apps[app].name);
-
-// ---------- the data, by day ----------
-
-const localNow = () => Date.now() / 1000 - new Date().getTimezoneOffset() * 60;
-const todayIdx = Math.floor(localNow() / DAY);
-
-// How far today's data goes: the last archive run (or now, if unknown)
-const dataUntil = (() => {
-  if (!DATA.lastArchived) return localNow();
-  const t = new Date(DATA.lastArchived);
-  return Math.min(localNow(), t.getTime() / 1000 - t.getTimezoneOffset() * 60);
-})();
-
 const nDev = DATA.devices.length;
+
+// ---------- the data, by day (every device; filtered when drawn) ----------
+
 const byDay = new Map();
 
 function dayEntry(day) {
@@ -97,8 +42,6 @@ function dayEntry(day) {
     byDay.set(day, {
       app: new Array(nDev).fill(0),   // seconds in apps, per device
       gap: new Array(nDev).fill(0),   // untracked seconds, per device
-      opens: new Array(nDev).fill(0),
-      apps: new Map(),                // app index -> { secs, devs }
       items: [],                      // [device, app or UNTRACKED, start, end]: everything counted
       sessions: [],                   // [device, app, start, end, activeSecs]
       gaps: [],                       // [device, start, end, hint]
@@ -110,23 +53,14 @@ function dayEntry(day) {
 for (const [dev, app, start, end] of DATA.segs) {
   const e = dayEntry(Math.floor(start / DAY));
   e.app[dev] += end - start;
-  if (!e.apps.has(app)) e.apps.set(app, { secs: 0, devs: new Set() });
-  const a = e.apps.get(app);
-  a.secs += end - start;
-  a.devs.add(dev);
   e.items.push([dev, app, start, end]);
 }
 
-// Join back-to-back uses of the same app into one session (one "open").
-// The server sends segs sorted by device, then start time.
+// Join back-to-back uses of the same app into one session, for the
+// timeline. The server sends segs sorted by device, then start time.
 {
   let cur = null;
-  const finish = () => {
-    if (!cur) return;
-    const e = dayEntry(Math.floor(cur[2] / DAY));
-    e.sessions.push(cur);
-    e.opens[cur[0]]++;
-  };
+  const finish = () => { if (cur) dayEntry(Math.floor(cur[2] / DAY)).sessions.push(cur); };
   for (const [dev, app, start, end] of DATA.segs) {
     const sameDay = cur && Math.floor(cur[2] / DAY) === Math.floor(start / DAY);
     if (cur && sameDay && cur[0] === dev && cur[1] === app && start - cur[3] <= SESSION_GAP) {
@@ -147,322 +81,357 @@ for (const [dev, start, end, hint] of DATA.gaps) {
   e.items.push([dev, UNTRACKED, start, end]);
 }
 
-const hasData = (day, dev) => (byDay.get(day)?.app[dev] ?? 0) > 0;
-const anyData = (day) => DATA.devices.some((_, dev) => hasData(day, dev));
-const complete = (day) => nDev > 0 && DATA.devices.every((_, dev) => hasData(day, dev));
-const deviceTotal = (day, dev) => { const e = byDay.get(day); return e ? e.app[dev] + e.gap[dev] : 0; };
-const total = (day) => DATA.devices.reduce((sum, _, dev) => sum + deviceTotal(day, dev), 0);
 const firstDay = byDay.size ? Math.min(...byDay.keys()) : todayIdx;
 
-// ---------- "your usual" ----------
-//
-// The same weekday in earlier weeks, using only days with data from every
-// device (a day missing the iPhone would make "usual" look too low). For
-// today, each of those days counts only up to the same time of day.
-// Everything that says "usual" (the headline, each device, each app, the
-// week chart) uses this one set of days, so they always agree.
-
-const usualCache = new Map();
-
-function usualFor(day) {
-  if (usualCache.has(day)) return usualCache.get(day);
-  const cutoffInDay = day === todayIdx ? dataUntil - day * DAY : DAY;
-  const days = [];
-  for (let d = day - 7; d >= firstDay && days.length < USUAL_MAX_DAYS; d -= 7) if (complete(d)) days.push(d);
-  let result = null;
-  if (days.length >= USUAL_MIN_DAYS) {
-    let sum = 0;
-    const perDevice = new Array(nDev).fill(0), perApp = new Map();
-    for (const d of days) {
-      const cutoff = d * DAY + cutoffInDay;
-      for (const [dev, app, start, end] of byDay.get(d).items) {
-        const secs = Math.max(0, Math.min(end, cutoff) - start);
-        sum += secs;
-        perDevice[dev] += secs;
-        perApp.set(app, (perApp.get(app) ?? 0) + secs);
-      }
-    }
-    const n = days.length;
-    result = {
-      days: n,
-      total: sum / n,
-      device: perDevice.map((s) => s / n),
-      app: new Map([...perApp].map(([app, s]) => [app, s / n])),
-    };
-  }
-  usualCache.set(day, result);
-  return result;
-}
-
-// Seconds per app on a day (UNTRACKED included)
-function appTotals(day) {
-  const out = new Map();
-  for (const [, app, start, end] of byDay.get(day)?.items ?? []) out.set(app, (out.get(app) ?? 0) + end - start);
-  return out;
-}
-
-// ---------- the chosen day ----------
-
-// The calendar's first day (a Monday, 11 weeks before this week's Monday).
+// The calendar's first day: a Monday, 5 weeks before this week's Monday.
 // You can go back to it or to your first day of data, whichever is earlier.
-const calendarStart = todayIdx - (weekdayOf(todayIdx) + 6) % 7 - 11 * 7;
+const calendarStart = todayIdx - (weekdayOf(todayIdx) + 6) % 7 - (CALENDAR_WEEKS - 1) * 7;
 const lowestDay = Math.min(firstDay, calendarStart);
 const clampDay = (d) => Math.max(lowestDay, Math.min(todayIdx, d));
-let day = clampDay(dayFromIso(decodeURIComponent(location.hash.slice(1))) ?? todayIdx);
 
-function selectDay(d) {
-  day = clampDay(d);
-  history.replaceState(null, "", day === todayIdx ? location.pathname : "#" + isoDay(day));
-  hideTip();
-  render();
+// ---------- what you picked ----------
+
+const state = { day: todayIdx, period: "day", device: "all" };
+{
+  const hash = decodeURIComponent(location.hash.slice(1));
+  const params = new URLSearchParams(hash);
+  const d = dayFromIso(hash) ?? dayFromIso(params.get("day") ?? "");
+  if (d !== null) state.day = clampDay(d);
+  if (PERIODS.includes(params.get("period"))) state.period = params.get("period");
+  const device = params.get("device");
+  if (device !== null && DATA.devices[Number(device)] !== undefined) state.device = device;
 }
 
-document.getElementById("prev-day").addEventListener("click", () => selectDay(day - 1));
-document.getElementById("next-day").addEventListener("click", () => selectDay(day + 1));
+let devs = []; // the chosen devices, as indexes
 
-// ---------- sections ----------
+function setDevices() {
+  devs = state.device === "all" ? DATA.devices.map((_, i) => i) : [Number(state.device)];
+  heatStepsCache = null;
+}
 
-function renderHero() {
+function writeAddress() {
+  const params = new URLSearchParams();
+  if (state.day !== todayIdx) params.set("day", isoDay(state.day));
+  if (state.period !== "day") params.set("period", state.period);
+  if (state.device !== "all") params.set("device", state.device);
+  const text = params.toString();
+  history.replaceState(null, "", text ? "#" + text : location.pathname);
+}
+
+// ---------- totals for the chosen devices ----------
+
+const hasData = (day, dev) => (byDay.get(day)?.app[dev] ?? 0) > 0;
+const anyData = (day) => devs.some((dev) => hasData(day, dev));
+const complete = (day) => devs.length > 0 && devs.every((dev) => hasData(day, dev));
+const deviceTotal = (day, dev) => { const e = byDay.get(day); return e ? e.app[dev] + e.gap[dev] : 0; };
+const total = (day) => devs.reduce((sum, dev) => sum + deviceTotal(day, dev), 0);
+const items = (day) => (byDay.get(day)?.items ?? []).filter(([dev]) => devs.includes(dev));
+
+// The days a period covers, ending on the chosen day. While today is still
+// going, the averages leave it out and use the full days before it, so a
+// morning doesn't pull them down.
+function periodWindow(period, end = state.day) {
+  if (period === "day") return { from: end, to: end };
+  const n = Number(period);
+  const to = end === todayIdx ? end - 1 : end;
+  return { from: to - n + 1, to };
+}
+
+// The days in a period that have data (only those count toward an average)
+function periodDays(period, end) {
+  const { from, to } = periodWindow(period, end);
+  const days = [];
+  for (let d = from; d <= to; d++) if (anyData(d)) days.push(d);
+  return days;
+}
+
+const average = (days, fn) => (days.length ? days.reduce((sum, d) => sum + fn(d), 0) / days.length : null);
+
+// "Oct 22 to 28", "Sep 30 to Oct 29"
+function rangeText(from, to) {
+  const a = fmtDate(from, { month: "short", day: "numeric" });
+  const sameMonth = dateOf(from).getUTCMonth() === dateOf(to).getUTCMonth();
+  return a + " to " + (sameMonth ? dateOf(to).getUTCDate() : fmtDate(to, { month: "short", day: "numeric" }));
+}
+
+function dayName(day, long) {
   const relative = day === todayIdx ? "Today" : day === todayIdx - 1 ? "Yesterday" : "";
   const sameYear = dateOf(day).getUTCFullYear() === dateOf(todayIdx).getUTCFullYear();
   const year = sameYear ? {} : { year: "numeric" };
-  const long = fmtDate(day, { weekday: "long", month: "long", day: "numeric", ...year });
-  const short = fmtDate(day, { weekday: "short", month: "short", day: "numeric", ...year });
-  // The short date is for narrow screens (see today.css)
-  document.getElementById("day-label").innerHTML = (relative ? '<span class="relative">' + relative + " · </span>" : "") +
-    '<span class="date-long">' + esc(long) + '</span><span class="date-short">' + esc(short) + "</span>";
-  document.getElementById("prev-day").disabled = day <= lowestDay;
-  document.getElementById("next-day").disabled = day >= todayIdx;
-
-  const totalEl = document.getElementById("day-total");
-  totalEl.textContent = anyData(day) ? fmt(total(day)) : "No data";
-  totalEl.classList.toggle("none", !anyData(day));
-
-  const compare = document.getElementById("day-compare");
-  compare.removeAttribute("data-tip");
-  const weekday = WEEKDAYS[weekdayOf(day)];
-  if (!anyData(day)) {
-    compare.textContent = day < firstDay
-      ? "This is before the tracker started saving data."
-      : day === todayIdx ? "Nothing archived yet today. Click Refresh to save the latest." : "Nothing was archived for this day.";
-    return;
-  }
-  if (!complete(day)) {
-    const missing = DATA.devices.filter((_, dev) => !hasData(day, dev));
-    const present = DATA.devices.filter((_, dev) => hasData(day, dev));
-    compare.textContent = "No " + missing.join(" or ") + " data " + (day === todayIdx ? "yet today" : "for this day") +
-      ", so this is " + present.join(" and ") + " only.";
-    return;
-  }
-  const u = usualFor(day);
-  if (!u) {
-    compare.textContent = "Not enough history yet to compare with your usual " + weekday + ".";
-    return;
-  }
-  const diff = total(day) - u.total;
-  const when = day === todayIdx ? " by this time of day" : "";
-  compare.dataset.tip = "Your usual " + weekday + ": " + fmt(u.total) + when + ".\nThe average of the last " + u.days + " " +
-    weekday + "s with data from all your devices.";
-  if (Math.abs(diff) < ABOUT_THE_SAME_SECS) {
-    compare.textContent = "About the same as your usual " + weekday + when + ".";
-    return;
-  }
-  // Which device made the difference
-  let why = "";
-  if (nDev > 1) {
-    const diffs = DATA.devices.map((_, dev) => deviceTotal(day, dev) - u.device[dev]);
-    const top = diffs.reduce((best, d, dev) => (d * Math.sign(diff) > diffs[best] * Math.sign(diff) ? dev : best), 0);
-    why = diffs[top] / diff >= MOSTLY_SHARE ? ", mostly on " + esc(DATA.devices[top]) : ", spread across your devices";
-  }
-  compare.innerHTML = '<span class="' + (diff < 0 ? "less" : "more") + '">' + fmt(Math.abs(diff)) + " " +
-    (diff < 0 ? "less" : "more") + "</span> than your usual " + weekday + when + why + ".";
+  const date = fmtDate(day, long ? { weekday: "long", month: "long", day: "numeric", ...year } : { weekday: "short", month: "short", day: "numeric", ...year });
+  return { relative, date };
 }
 
-function renderDevices() {
-  const e = byDay.get(day);
-  const u = complete(day) ? usualFor(day) : null;
-  document.getElementById("device-cards").innerHTML = DATA.devices.map((name, dev) => {
-    const has = hasData(day, dev);
-    const opens = e?.opens[dev] ?? 0;
-    const gap = e?.gap[dev] ?? 0;
-    let change = "&nbsp;";
-    if (has && u) {
-      const diff = deviceTotal(day, dev) - u.device[dev];
-      change = Math.abs(diff) < ABOUT_THE_SAME_SECS ? "About usual" : changeHtml(diff, " vs usual");
-    } else if (has) {
-      change = '<span class="muted">No usual yet</span>';
+// ---------- the top: date or range, device switch, the three cards ----------
+
+function renderRangeBar() {
+  const label = document.getElementById("range-label");
+  if (state.period === "day") {
+    const long = dayName(state.day, true), short = dayName(state.day, false);
+    const rel = long.relative ? '<span class="muted">' + long.relative + " · </span>" : "";
+    label.innerHTML = rel + '<span class="date-long">' + esc(long.date) + '</span><span class="date-short">' + esc(short.date) + "</span>";
+  } else {
+    const { from, to } = periodWindow(state.period);
+    label.textContent = rangeText(from, to);
+  }
+  const step = state.period === "day" ? 1 : Number(state.period);
+  document.getElementById("prev").disabled = state.day - step < lowestDay;
+  document.getElementById("next").disabled = state.day >= todayIdx;
+
+  const el = document.getElementById("device-filter");
+  el.hidden = nDev < 2;
+  const options = [["all", "All devices"]].concat(DATA.devices.map((name, i) => [String(i), name]));
+  el.innerHTML = options.map(([v, text]) =>
+    '<button data-v="' + esc(v) + '" aria-pressed="' + (v === state.device) + '">' + esc(text) + "</button>").join("");
+}
+
+function renderCards() {
+  const cards = PERIODS.map((p) => {
+    let label, small = "", value, split;
+    if (p === "day") {
+      const n = dayName(state.day, false);
+      label = n.relative || n.date;
+      value = anyData(state.day) ? fmt(total(state.day)) : null;
+      split = devs.map((dev) => [dev, hasData(state.day, dev) ? fmt(deviceTotal(state.day, dev)) : "no data"]);
+    } else {
+      const { from, to } = periodWindow(p);
+      const days = periodDays(p);
+      label = p + "-day average";
+      small = rangeText(from, to) + (days.length && days.length < Number(p) ? " · " + days.length + " days with data" : "");
+      const avg = average(days, total);
+      value = avg === null ? null : fmt(avg);
+      split = devs.map((dev) => {
+        const ds = days.filter((d) => hasData(d, dev));
+        const a = average(ds, (d) => deviceTotal(d, dev));
+        return [dev, a === null ? "no data" : fmt(a)];
+      });
     }
-    // The same four lines every day, so the card stays the same size
-    return '<div class="device-card">' +
-      '<div class="name"><span class="dot" style="background:' + devColor(dev) + '"></span>' + esc(name) + "</div>" +
-      (has ? '<div class="value">' + fmt(deviceTotal(day, dev)) + "</div>" : '<div class="value none">No data</div>') +
-      '<div class="change">' + change + "</div>" +
-      '<div class="sub">' + (has ? opens + (opens === 1 ? " open" : " opens") + (gap >= 60 ? " · " + fmt(gap) + " untracked" : "") : "&nbsp;") + "</div>" +
-      "</div>";
-  }).join("");
+    return '<button class="period-card" data-period="' + p + '" aria-pressed="' + (p === state.period) + '">' +
+      '<span class="label"><span>' + esc(label) + "</span><small>" + esc(small) + "</small></span>" +
+      '<span class="value' + (value === null ? " none" : "") + '">' + (value ?? "No data") + "</span>" +
+      '<span class="split">' + split.map(([dev, text], i) =>
+        '<span><span class="dot' + (i === 0 ? " first" : "") + '" style="background:' + devColor(dev) + '"></span>' +
+        esc(DATA.devices[dev] + " " + text) + "</span>").join("") + "</span></button>";
+  });
+  document.getElementById("period-cards").innerHTML = cards.join("");
 }
+
+// ---------- timeline: the day, or an average day ----------
 
 function renderTimeline() {
-  const e = byDay.get(day);
-  const start = day * DAY;
-  const pos = (from, to) => "left:" + (((from - start) / DAY) * 100).toFixed(3) + "%;width:" + (((to - from) / DAY) * 100).toFixed(3) + "%";
-  const lanes = DATA.devices.map((name, dev) => {
-    const sessions = (e?.sessions ?? []).filter((s) => s[0] === dev);
-    const gaps = (e?.gaps ?? []).filter((g) => g[0] === dev);
-    if (!sessions.length && !gaps.length) {
-      return '<div class="lane"><span class="lane-name">' + esc(name) + '</span><div class="lane-track no-data">No data</div></div>';
-    }
-    const blocks = sessions.map(([, app, from, to, active]) =>
-      '<div class="block" style="' + pos(from, to) + ";background:" + devColor(dev) + '" data-tip="' +
-      esc(appName(app) + "\n" + fmtClock(from) + " to " + fmtClock(to) + " · " + fmt(active)) + '"></div>');
-    const gapBlocks = gaps.map(([, from, to, hint]) => {
-      const before = hint.length ? "\nLast opened: " + hint.map(([app, at]) => appName(app) + " at " + fmtClock(at)).join(", ") : "";
-      return '<div class="block gap" style="' + pos(from, to) + '" data-tip="' +
-        esc("Screen on, no app recorded\n" + fmtClock(from) + " to " + fmtClock(to) + " · " + fmt(to - from) + before) + '"></div>';
-    });
-    return '<div class="lane"><span class="lane-name">' + esc(name) + '</span><div class="lane-track">' +
-      blocks.join("") + gapBlocks.join("") + "</div></div>";
-  });
-  document.getElementById("timeline").innerHTML = lanes.join("") +
-    '<div class="hours"><span></span><div><span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>12a</span></div></div>';
-}
+  const title = document.getElementById("timeline-title");
+  const hint = document.getElementById("timeline-hint");
+  const el = document.getElementById("timeline");
+  const axis = '<div class="hours"><span></span><div><span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>12a</span></div></div>';
 
-function renderTopApps() {
-  const e = byDay.get(day);
-  const el = document.getElementById("top-apps");
-  const hint = document.getElementById("apps-hint");
-  const u = complete(day) ? usualFor(day) : null;
-  hint.textContent = u ? "▲▼ vs your usual " + WEEKDAYS[weekdayOf(day)] : "";
-  if (!e || !anyData(day)) {
-    el.innerHTML = '<p class="hint">No apps recorded on this day.</p>';
+  if (state.period === "day") {
+    title.textContent = "Through the day";
+    hint.textContent = "Hover over a block for the app and time. Gray stripes: screen on, no app recorded.";
+    const e = byDay.get(state.day);
+    const start = state.day * DAY;
+    const pos = (from, to) => "left:" + (((from - start) / DAY) * 100).toFixed(3) + "%;width:" + (((to - from) / DAY) * 100).toFixed(3) + "%";
+    el.innerHTML = devs.map((dev) => {
+      const name = DATA.devices[dev];
+      const sessions = (e?.sessions ?? []).filter((s) => s[0] === dev);
+      const gaps = (e?.gaps ?? []).filter((g) => g[0] === dev);
+      if (!sessions.length && !gaps.length) {
+        return '<div class="lane"><span class="lane-name">' + esc(name) + '</span><div class="lane-track no-data">No data</div></div>';
+      }
+      const blocks = sessions.map(([, app, from, to, active]) =>
+        '<div class="block" style="' + pos(from, to) + ";background:" + devColor(dev) + '" data-tip="' +
+        esc(appName(app) + "\n" + fmtClock(from) + " to " + fmtClock(to) + " · " + fmt(active)) + '"></div>');
+      const gapBlocks = gaps.map(([, from, to, hint]) => {
+        const before = hint.length ? "\nLast opened: " + hint.map(([app, at]) => appName(app) + " at " + fmtClock(at)).join(", ") : "";
+        return '<div class="block gap" style="' + pos(from, to) + '" data-tip="' +
+          esc("Screen on, no app recorded\n" + fmtClock(from) + " to " + fmtClock(to) + " · " + fmt(to - from) + before) + '"></div>';
+      });
+      return '<div class="lane"><span class="lane-name">' + esc(name) + '</span><div class="lane-track">' +
+        blocks.join("") + gapBlocks.join("") + "</div></div>";
+    }).join("") + axis;
     return;
   }
-  const totals = appTotals(day);
-  const rows = [...totals].filter(([app, secs]) => app !== UNTRACKED || secs >= 60).map(([app, secs]) => ({
-    app,
-    secs,
-    where: app === UNTRACKED
-      ? "Screen on, no app recorded"
-      : [...e.apps.get(app).devs].sort((x, y) => x - y).map((dev) => DATA.devices[dev]).join(" and "),
-  }));
-  rows.sort((a, b) => b.secs - a.secs);
+
+  // An average day: minutes in each hour, averaged over the days with data,
+  // one color per device, stacked
+  const days = periodDays(state.period);
+  const { from, to } = periodWindow(state.period);
+  title.textContent = "An average day, " + rangeText(from, to);
+  hint.textContent = devs.length > 1 ? "Minutes per hour · " + devs.map((dev) => DATA.devices[dev]).join(", ") + " stacked" : "Minutes per hour";
+  const perHour = devs.map(() => new Array(24).fill(0));
+  for (const d of days) {
+    for (const [dev, , start, end] of items(d)) {
+      const k = devs.indexOf(dev);
+      for (let t = start; t < end;) {
+        const upTo = Math.min(end, (Math.floor(t / 3600) + 1) * 3600);
+        perHour[k][Math.floor((t % DAY) / 3600)] += upTo - t;
+        t = upTo;
+      }
+    }
+  }
+  const n = Math.max(1, days.length);
+  const avg = perHour.map((row) => row.map((s) => s / n));
+  const max = Math.max(60, ...Array.from({ length: 24 }, (_, h) => avg.reduce((s, row) => s + row[h], 0)));
+  const hourName = (h) => (h === 0 ? "12 AM" : h < 12 ? h + " AM" : h === 12 ? "12 PM" : h - 12 + " PM");
+  const bars = Array.from({ length: 24 }, (_, h) => {
+    const tip = hourName(h) + "\n" + devs.map((dev, k) => DATA.devices[dev] + ": " + fmt(avg[k][h])).join("\n");
+    // Top to bottom: later devices first, so the first device sits at the bottom
+    const parts = devs.map((dev, k) => '<span style="height:' + ((avg[k][h] / max) * 100).toFixed(2) + "%;background:" + devColor(dev) + '"></span>').reverse();
+    return '<div class="hour-bar" data-tip="' + esc(tip) + '">' + parts.join("") + "</div>";
+  });
+  el.innerHTML = days.length
+    ? '<div class="avg-day"><span></span><div class="hour-bars">' + bars.join("") + "</div></div>" + axis
+    : '<p class="hint">No data in this period.</p>';
+}
+
+// ---------- top apps: the day, or per day on average ----------
+
+function renderTopApps() {
+  const el = document.getElementById("top-apps");
+  const days = state.period === "day" ? (anyData(state.day) ? [state.day] : []) : periodDays(state.period);
+  const title = document.getElementById("apps-title");
+  if (state.period === "day") title.textContent = "Where the time went";
+  else { const { from, to } = periodWindow(state.period); title.textContent = "Per day, " + rangeText(from, to); }
+  const params = new URLSearchParams({ range: state.period === "day" ? "7" : state.period, device: state.device });
+  document.getElementById("apps-link").href = "/apps#" + params;
+  if (!days.length) {
+    el.innerHTML = '<p class="hint">No apps recorded ' + (state.period === "day" ? "on this day." : "in this period.") + "</p>";
+    return;
+  }
+  const totals = new Map();
+  for (const d of days) {
+    for (const [dev, app, start, end] of items(d)) {
+      if (!totals.has(app)) totals.set(app, { secs: 0, devs: new Set() });
+      const a = totals.get(app);
+      a.secs += end - start;
+      a.devs.add(dev);
+    }
+  }
+  const rows = [...totals]
+    .map(([app, a]) => ({ app, secs: a.secs / days.length, devs: a.devs }))
+    .filter((r) => r.app !== UNTRACKED || r.secs >= 60)
+    .sort((a, b) => b.secs - a.secs);
   const shown = rows.slice(0, MAX_TOP_APPS);
   const max = shown[0].secs;
   el.innerHTML = shown.map((r) => {
-    const diff = u ? r.secs - (u.app.get(r.app) ?? 0) : 0;
-    return '<div class="app-row"><div class="app-name"><b>' + esc(appName(r.app)) + "</b><span>" + esc(r.where) + "</span></div>" +
+    const where = r.app === UNTRACKED ? "Screen on, no app recorded" : [...r.devs].sort((x, y) => x - y).map((dev) => DATA.devices[dev]).join(" and ");
+    return '<div class="app-row"><div class="app-name"><b>' + esc(appName(r.app)) + "</b><span>" + esc(where) + "</span></div>" +
       '<div class="bar-track"><div class="bar-fill' + (r.app === UNTRACKED ? " gap" : "") + '" style="width:' + ((r.secs / max) * 100).toFixed(1) + '%"></div></div>' +
-      '<div class="app-time"><span>' + fmt(r.secs) + "</span>" +
-      (Math.abs(diff) >= SHOW_CHANGE_SECS ? '<span class="app-change">' + changeHtml(diff) + "</span>" : '<span class="app-change">&nbsp;</span>') +
-      "</div></div>";
+      '<span class="app-time">' + fmt(r.secs) + "</span></div>";
   }).join("");
-
-  // Apps you usually use a lot that barely showed up, so a "less than
-  // usual" day has its explanation too
-  let down = "";
-  if (u) {
-    const shownApps = new Set(shown.map((r) => r.app));
-    const drops = [...u.app]
-      .filter(([app]) => !shownApps.has(app))
-      .map(([app, usual]) => ({ app, diff: (totals.get(app) ?? 0) - usual }))
-      .filter((d) => d.diff <= -DOWN_FROM_USUAL_SECS)
-      .sort((a, b) => a.diff - b.diff)
-      .slice(0, 3);
-    if (drops.length) {
-      down = '<div class="down"><p class="down-title">Less than usual</p>' +
-        drops.map((d) => '<div class="down-row"><span>' + esc(appName(d.app)) + "</span>" + changeHtml(d.diff) + "</div>").join("") +
-        "</div>";
-    }
+  const more = rows.length - shown.length;
+  if (more > 0) {
+    el.innerHTML += '<a class="more-link" href="/apps#' + params + '">and ' + more + " more " + (more === 1 ? "app" : "apps") + "</a>";
   }
-  el.innerHTML += (rows.length > shown.length ? '<p class="hint">and ' + (rows.length - shown.length) + " more</p>" : "") + down;
 }
 
-function renderWeek() {
-  const days = Array.from({ length: 7 }, (_, i) => day - 6 + i);
-  // Average of complete days in the 30 days up to the chosen one (today is
-  // left out while it's still going)
-  const pool = Array.from({ length: 30 }, (_, i) => day - i).filter((d) => d !== todayIdx && complete(d));
-  const avg = pool.length ? pool.reduce((sum, d) => sum + total(d), 0) / pool.length : null;
-  document.getElementById("week-average").textContent = avg === null ? "" : "30-day average " + fmt(avg);
+// ---------- bars: the 7 days around the day, or the period ----------
 
-  const usuals = days.map((d) => (anyData(d) ? usualFor(d) : null));
-  const top = Math.max(3600, ...days.map(total), ...usuals.map((u) => u?.total ?? 0)) * 1.05;
-  let anyPartial = false, anyUsual = false;
-  document.getElementById("week").innerHTML = days.map((d, i) => {
+function renderBars() {
+  const isDay = state.period === "day";
+  const n = state.period === "30" ? 30 : 7;
+  const win = isDay ? { from: state.day - 6, to: state.day } : periodWindow(state.period);
+  const days = [];
+  for (let d = win.from; d <= win.to; d++) days.push(d);
+  const avg = isDay ? null : average(periodDays(state.period), total);
+  document.getElementById("bars-title").textContent = isDay
+    ? (state.day === todayIdx ? "Last 7 days" : "7 days to " + fmtDate(state.day, { month: "short", day: "numeric" }))
+    : (n === 30 ? "Last 30 days" : "Last 7 days") + (state.day === todayIdx ? ", not counting today" : "");
+  document.getElementById("bars-hint").innerHTML = isDay ? "Click a day to see it"
+    : '<span class="avg-key"></span>' + n + "-day average " + (avg === null ? "–" : "<b>" + fmt(avg) + "</b>");
+
+  const top = Math.max(3600, ...days.map(total), avg ?? 0) * 1.08;
+  const many = n === 30;
+  const cols = days.map((d) => {
     const has = anyData(d);
     const partial = has && !complete(d);
-    if (partial) anyPartial = true;
-    const t = total(d);
-    const u = usuals[i];
-    if (u) anyUsual = true;
-    const label = d === todayIdx ? "Today" : fmtDate(d, { weekday: "short" });
-    const long = fmtDate(d, { weekday: "long", month: "short", day: "numeric" });
-    const tip = long + ": " + (has ? fmt(t) : "no data") +
-      (partial ? "\nMissing data from a device" : "") +
-      (u ? "\nYour usual " + WEEKDAYS[weekdayOf(d)] + ": " + fmt(u.total) + (d === todayIdx ? " by this time" : "") : "");
-    return '<button class="week-day" data-day="' + d + '" aria-pressed="' + (d === day) + '" aria-label="' + esc(tip.replace(/\n/g, ". ")) +
-      '" data-tip="' + esc(tip) + '">' +
-      // The usual is a light column behind the day's (narrower) bar
-      '<div class="bar-area">' +
-      (u ? '<div class="usual-col" style="height:' + ((u.total / top) * 100).toFixed(1) + '%"></div>' : "") +
-      (has ? '<div class="bar' + (partial ? " partial" : "") + '" style="height:' + ((t / top) * 100).toFixed(1) + '%"></div>' : '<div class="bar none"></div>') +
-      "</div>" +
-      '<span class="label">' + esc(label) + "</span>" +
-      '<span class="time">' + (has ? fmt(t) : "–") + "</span></button>";
-  }).join("");
-  const notes = [];
-  if (anyUsual) notes.push('<span class="usual-key"></span>your usual for that weekday');
-  if (anyPartial) notes.push("striped bars are missing data from a device");
-  document.getElementById("week-note").innerHTML = notes.length ? notes.join(" · ") : "";
+    // For a day, its bar is dark; for a period every bar is in it, so they
+    // stay light and the dashed average line stands out
+    const on = isDay && d === state.day;
+    const label = fmtDate(d, { weekday: "short", month: "short", day: "numeric" });
+    const tip = label + ": " + (has ? fmt(total(d)) : "no data") + (partial ? "\nMissing data from a device" : "") + "\nClick to see this day";
+    const cls = "bar" + (on ? " on" : "") + (partial ? " partial" : "") + (has ? "" : " none");
+    return '<button class="bar-col" data-day="' + d + '" data-tip="' + esc(tip) + '" aria-label="' + esc(tip.split("\n").slice(0, 2).join(", ")) + '">' +
+      '<span class="' + cls + '" style="height:' + ((total(d) / top) * 100).toFixed(1) + '%"></span></button>';
+  });
+  const labels = days.map((d, i) => {
+    const on = isDay && d === state.day;
+    let text = d === todayIdx ? "Today" : fmtDate(d, { weekday: "short" });
+    if (many) text = (days.length - 1 - i) % 7 === 0 ? fmtDate(d, { month: "short", day: "numeric" }) : "";
+    return '<div><span class="label' + (on ? " on" : "") + '">' + esc(text) + "</span>" +
+      (many ? "" : '<span class="time">' + (anyData(d) ? fmt(total(d)) : "–") + "</span>") + "</div>";
+  });
+  document.getElementById("bars").innerHTML =
+    '<div class="bar-plot' + (many ? " many" : "") + '">' +
+    (avg === null ? "" : '<div class="avg-line" style="bottom:' + ((avg / top) * 100).toFixed(1) + '%"></div>') +
+    cols.join("") + "</div>" +
+    '<div class="bar-labels' + (many ? " many" : "") + '">' + labels.join("") + "</div>";
 }
 
-// Calendar shades come from your own days, so they show your lighter and
-// heavier days whatever your usual amount is: each shade is about a fifth of
-// your days, with the limits rounded to the half hour. Until there are a
-// few days, fixed steps (2h, 4h, 6h, 8h) are used.
-const HEAT_STEPS = (() => {
-  const values = [...byDay.keys()].filter(anyData).map(total).sort((a, b) => a - b);
-  if (values.length < 10) return [2, 4, 6, 8].map((h) => h * 3600);
-  const at = (share) => values[Math.min(values.length - 1, Math.floor(share * values.length))];
-  const steps = [0.2, 0.4, 0.6, 0.8].map((share) => Math.max(1800, Math.round(at(share) / 1800) * 1800));
-  for (let i = 1; i < steps.length; i++) if (steps[i] <= steps[i - 1]) steps[i] = steps[i - 1] + 1800;
-  return steps;
-})();
+// ---------- the 6-week calendar and the hours of the week ----------
 
-function heatLevel(secs) {
-  const step = HEAT_STEPS.findIndex((limit) => secs < limit);
+// Shades come from your own values, so they show your lighter and heavier
+// days (or hours) whatever your usual amount is: each shade is about a fifth
+// of the values. With too few values, the fallback steps are used.
+function quintileSteps(values, round, fallback) {
+  const sorted = values.filter((v) => v > 0).sort((a, b) => a - b);
+  if (sorted.length < 10) return fallback;
+  const at = (share) => sorted[Math.min(sorted.length - 1, Math.floor(share * sorted.length))];
+  const steps = [0.2, 0.4, 0.6, 0.8].map((share) => Math.max(round, Math.round(at(share) / round) * round));
+  for (let i = 1; i < steps.length; i++) if (steps[i] <= steps[i - 1]) steps[i] = steps[i - 1] + round;
+  return steps;
+}
+
+function heatLevel(secs, steps) {
+  const step = steps.findIndex((limit) => secs < limit);
   return step === -1 ? 5 : step + 1;
 }
 
+function legendKeys(steps) {
+  return [1, 2, 3, 4, 5].map((n, i) =>
+    '<span class="cal-key" style="background:var(--heat-' + n + ')" data-tip="' +
+    (i === 0 ? "Under " + fmt(steps[0]) : i === 4 ? fmt(steps[3]) + " or more" : fmt(steps[i - 1]) + " to " + fmt(steps[i])) +
+    '"></span>').join("");
+}
+
+let heatStepsCache = null;
+function dayHeatSteps() {
+  if (!heatStepsCache) {
+    heatStepsCache = quintileSteps([...byDay.keys()].filter(anyData).map(total), 1800, [2, 4, 6, 8].map((h) => h * 3600));
+  }
+  return heatStepsCache;
+}
+
 function renderCalendar() {
-  const start = calendarStart;
+  const steps = dayHeatSteps();
+  const isDay = state.period === "day";
+  const win = periodWindow(state.period);
+  document.getElementById("calendar-hint").textContent = isDay ? "Click a day to see it" : "The period is in full color";
   const cols = [];
   const months = [];
-  for (let w = 0; w < 12; w++) {
-    const colStart = start + w * 7;
+  for (let w = 0; w < CALENDAR_WEEKS; w++) {
+    const colStart = calendarStart + w * 7;
     const month = fmtDate(colStart, { month: "short" });
     months.push(w === 0 || month !== fmtDate(colStart - 7, { month: "short" }) ? month : "");
     let cells = "";
     for (let i = 0; i < 7; i++) {
       const d = colStart + i;
-      const label = fmtDate(d, { weekday: "short", month: "short", day: "numeric" });
       if (d > todayIdx) {
         cells += '<span class="cal-day future" aria-hidden="true"></span>';
-      } else if (!anyData(d)) {
-        cells += '<button class="cal-day empty" data-day="' + d + '" aria-pressed="' + (d === day) + '" data-tip="' +
-          esc(label + "\nNo data") + '" aria-label="' + esc(label + ": no data") + '"></button>';
+        continue;
+      }
+      const label = fmtDate(d, { weekday: "short", month: "short", day: "numeric" });
+      const extra = (isDay && d === state.day ? " chosen" : "") + (!isDay && (d < win.from || d > win.to) ? " faded" : "");
+      if (!anyData(d)) {
+        cells += '<button class="cal-day empty' + extra + '" data-day="' + d + '" data-tip="' + esc(label + "\nNo data") +
+          '" aria-label="' + esc(label + ": no data") + '"></button>';
       } else {
         const text = label + "\n" + fmt(total(d)) + (complete(d) ? "" : "\nMissing data from a device");
-        cells += '<button class="cal-day" data-day="' + d + '" aria-pressed="' + (d === day) + '" style="background:var(--heat-' +
-          heatLevel(total(d)) + ')" data-tip="' + esc(text) + '" aria-label="' + esc(text.replace(/\n/g, ", ")) + '"></button>';
+        cells += '<button class="cal-day' + extra + '" data-day="' + d + '" style="background:var(--heat-' + heatLevel(total(d), steps) +
+          ')" data-tip="' + esc(text) + '" aria-label="' + esc(text.replace(/\n/g, ", ")) + '"></button>';
       }
     }
     cols.push('<div class="cal-week">' + cells + "</div>");
   }
-  const keys = [1, 2, 3, 4, 5].map((n, i) =>
-    '<span class="cal-key" style="background:var(--heat-' + n + ')" data-tip="' +
-    (i === 0 ? "Under " + fmt(HEAT_STEPS[0]) : i === 4 ? fmt(HEAT_STEPS[3]) + " or more" : fmt(HEAT_STEPS[i - 1]) + " to " + fmt(HEAT_STEPS[i])) +
-    '"></span>').join("");
   document.getElementById("calendar").innerHTML =
     '<div class="calendar">' +
     '<div class="cal-weekdays"><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span>Sun</span></div>' +
@@ -470,61 +439,97 @@ function renderCalendar() {
     "<span></span>" +
     '<div class="cal-months">' + months.map((m) => "<span>" + esc(m) + "</span>").join("") + "</div>" +
     "</div>" +
-    '<div class="cal-legend" style="margin-top:12px">' +
-    '<span><span class="cal-key empty"></span>No data archived (before the tracker started, or a missed day)</span>' +
-    "<span>less " + keys + " more</span></div>";
+    '<div class="cal-legend"><span><span class="cal-key empty"></span>No data</span><span>less ' + legendKeys(steps) + " more</span></div>";
 }
 
-// Clicking a day in the week or the calendar shows it
-for (const id of ["week", "calendar"]) {
+// Weekday by hour: the average time in each hour. For a day, over the last
+// 6 weeks (today left out while it's going); for 7 or 30 days, over the period.
+function renderHours() {
+  const isDay = state.period === "day";
+  const days = [];
+  if (isDay) {
+    for (let d = Math.max(calendarStart, firstDay); d < todayIdx; d++) if (anyData(d)) days.push(d);
+  } else {
+    days.push(...periodDays(state.period));
+  }
+  document.getElementById("hours-hint").textContent = isDay ? "Last 6 weeks" : (() => { const w = periodWindow(state.period); return rangeText(w.from, w.to); })();
+  const sums = Array.from({ length: 7 }, () => new Array(24).fill(0));
+  const counts = new Array(7).fill(0);
+  for (const d of days) {
+    const w = weekdayOf(d);
+    counts[w]++;
+    for (const [, , start, end] of items(d)) {
+      for (let t = start; t < end;) {
+        const upTo = Math.min(end, (Math.floor(t / 3600) + 1) * 3600);
+        sums[w][Math.floor((t % DAY) / 3600)] += upTo - t;
+        t = upTo;
+      }
+    }
+  }
+  const avg = sums.map((row, w) => row.map((s) => (counts[w] ? s / counts[w] : 0)));
+  const steps = quintileSteps(avg.flat(), 60, [5, 15, 30, 45].map((m) => m * 60));
+  const chosen = isDay ? weekdayOf(state.day) : -1;
+  const hourName = (h) => (h === 0 ? "12 AM" : h < 12 ? h + " AM" : h === 12 ? "12 PM" : h - 12 + " PM");
+  const rows = MON_FIRST.map((w) => {
+    const cells = avg[w].map((s, h) => {
+      const text = WEEKDAYS[w] + "s, " + hourName(h) + ": " + (counts[w] ? fmt(s) + " on average" : "no data");
+      const shade = !counts[w] ? "" : s < 30 ? "background:var(--lane)" : "background:var(--heat-" + heatLevel(s, steps) + ")";
+      return '<span class="hour-cell' + (counts[w] ? " has" : "") + '" style="' + shade + '" data-tip="' + esc(text) + '"></span>';
+    }).join("");
+    return '<span class="hour-day' + (w === chosen ? " chosen" : "") + '">' + WEEKDAYS[w].slice(0, 3) + "</span>" +
+      '<div class="hour-row">' + cells + "</div>";
+  }).join("");
+  document.getElementById("hours-heatmap").innerHTML =
+    '<div class="hour-grid">' + rows +
+    '<span></span><div class="hour-axis"><span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>12a</span></div></div>' +
+    '<div class="cal-legend"><span>Average per hour</span><span>less ' + legendKeys(steps) + " more</span></div>";
+}
+
+// ---------- clicks ----------
+
+function update(changes) {
+  Object.assign(state, changes);
+  state.day = clampDay(state.day);
+  hideTip();
+  render();
+}
+
+document.getElementById("prev").addEventListener("click", () =>
+  update({ day: state.day - (state.period === "day" ? 1 : Number(state.period)) }));
+document.getElementById("next").addEventListener("click", () =>
+  update({ day: state.day + (state.period === "day" ? 1 : Number(state.period)) }));
+
+document.getElementById("period-cards").addEventListener("click", (e) => {
+  const card = e.target.closest("[data-period]");
+  if (card) update({ period: card.dataset.period });
+});
+
+// Clicking a day in the bars or the calendar shows that day
+for (const id of ["bars", "calendar"]) {
   document.getElementById(id).addEventListener("click", (e) => {
     const target = e.target.closest("[data-day]");
-    if (target) selectDay(Number(target.dataset.day));
+    if (target) update({ day: Number(target.dataset.day), period: "day" });
   });
 }
 
-// ---------- hover details ----------
-// Anything with data-tip shows it right away on hover, or on keyboard focus.
-
-const tip = document.getElementById("tip");
-
-function showTip(el, x, y) {
-  tip.textContent = el.dataset.tip;
-  tip.hidden = false;
-  const pad = 12, w = tip.offsetWidth, h = tip.offsetHeight;
-  let left = x + pad, top = y + pad;
-  if (left + w > window.innerWidth - 8) left = x - w - pad;
-  if (top + h > window.innerHeight - 8) top = y - h - pad;
-  tip.style.left = Math.max(8, left) + "px";
-  tip.style.top = Math.max(8, top) + "px";
-}
-
-function hideTip() {
-  tip.hidden = true;
-}
-
-document.addEventListener("mousemove", (e) => {
-  const el = e.target.closest?.("[data-tip]");
-  if (el) showTip(el, e.clientX, e.clientY);
-  else hideTip();
+document.getElementById("device-filter").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-v]");
+  if (!b || b.dataset.v === state.device) return;
+  state.device = b.dataset.v;
+  setDevices();
+  update({});
 });
-document.addEventListener("mouseleave", hideTip);
-document.addEventListener("focusin", (e) => {
-  const el = e.target.closest?.("[data-tip]");
-  if (!el) return hideTip();
-  const r = el.getBoundingClientRect();
-  showTip(el, r.left + r.width / 2, r.bottom);
-});
-document.addEventListener("focusout", hideTip);
-window.addEventListener("scroll", hideTip, { passive: true });
 
 function render() {
-  renderHero();
-  renderDevices();
+  writeAddress();
+  renderRangeBar();
+  renderCards();
   renderTimeline();
   renderTopApps();
-  renderWeek();
+  renderBars();
   renderCalendar();
+  renderHours();
 }
 
+setDevices();
 render();

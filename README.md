@@ -27,7 +27,6 @@ If the archiver says it can't read Apple's files, Full Disk Access isn't set up 
 Then:
 
 - Run `npm run schedule -- install` so new data is saved every day (see [Run it automatically](#run-it-automatically)). Apple deletes Screen Time data after about four weeks, so anything not archived by then is gone.
-- Optionally, run `node tools/download_chart_js.mjs` so the dashboard works without internet.
 
 ## Usage
 
@@ -57,19 +56,19 @@ PORT=4000 npm start      # use another port
 
 It has three pages:
 
-- **Today** (the home page): the day's total and how it compares with your usual for that weekday, each device, a timeline of the day, the top apps, the week around it, and a 12-week calendar. Use the arrows, or click a day in the week or the calendar, to look at another day.
-- **Apps**: every app with its opens and session lengths, hours per day, and when in the week you use your devices. (This is the previous dashboard, until a new Apps page replaces it.)
+- **Today** (the home page): three cards at the top show the day, the 7-day average and the 30-day average, each split by device. Click a card and the whole page follows it: the timeline (the day, or an average day by hour), the top apps (that day, or per day on average), the bar chart (7 or 30 days with the average drawn in), the 6-week calendar and the hours of the week. The arrows move back and forward by a day, 7 days or 30 days, and clicking a day in the chart or the calendar shows that day. The device switch (all devices, iPhone or Mac) applies to everything.
+- **Apps**: every app ranked by time per day, for the last 7 days, 30 days or all time, on any or all devices, with its last 14 days and its change from the period before. Click an app for its opens, typical and longest session, when during the day you use it, and each day (click a day to open it on the Today page).
 - **Organize**: your categories and app names (see below).
 
-"Your usual" is the average of the same weekday in earlier weeks (up to 8), using only days with data from all your devices, so a day missing the iPhone doesn't drag it down. For today, it compares the same part of the day. It needs at least 3 such days before it shows. The same days are used everywhere the Today page compares: the headline (which also names the device that made most of the difference), each device, each app, and the marks on the week chart.
+Averages count only days with data, and leave out today while it's still going, so a morning doesn't pull them down. The cards say which dates they cover, and how many of those days have data when some don't.
 
-The Apps page draws its charts with Chart.js. Run `node tools/download_chart_js.mjs` once to keep a copy in `public/vendor/`, so it works without internet. Otherwise it loads Chart.js from the internet. The Today page doesn't need it.
+The pages need no libraries and work without internet. Only the typeface (Plus Jakarta Sans, from Google Fonts) needs it; offline, they use your system font.
 
 ### App names and categories
 
 Open the **Organize** page (the link at the top of the dashboard, or http://localhost:3000/organize). Changes save as you make them, and the dashboard uses them the next time it loads.
 
-- **Categories:** add your own, rename them, pick each one's color from 8, move them up or down (that's their order in the charts), or delete them. Deleting a category moves its apps to Other. Other is always there and always gray.
+- **Categories:** add your own, rename them, pick each one's color from 8, move them up or down, or delete them. Deleting a category moves its apps to Other. Other is always there and always gray. (The Today and Apps pages don't use categories yet.)
 - **Apps:** rename any app and pick its category. Apps you haven't set yet are listed first. The **Set by** column shows whether an app's name and category come from the built-in list or from you, and **Reset** goes back to the built-in ones.
 
 Common apps start with built-in names and categories (`default_apps.mjs`). Anything else shows as the last part of its app ID, under Other, until you name it. Your categories and app names are saved in your archive database, not in the project files, so they stay private and survive updates.
@@ -137,7 +136,7 @@ Daily iPhone totals can come out lower than Apple's. Apple's iPhone total includ
 |---|---|
 | `archive_screen_time.mjs` | Reads Biome and knowledgeC and saves new sessions to the archive |
 | `server.mjs` | The local dashboard server and its API |
-| `public/` | The dashboard pages (HTML, CSS and browser JavaScript): `today.*`, `old_dashboard.html` with `dashboard.js` (the Apps page for now), `organize.*`, and `refresh.js` for the Refresh button |
+| `public/` | The dashboard pages (HTML, CSS and browser JavaScript): `today.*`, `apps.*` and `organize.*`, plus the shared `base.css`, `common.js` and `refresh.js` (the Refresh button) |
 | `screen_time_report.mjs` | Daily totals and top apps in the terminal |
 | `app_lookup.mjs` | Per-app totals, for checking numbers against Apple |
 | `schedule_archive.mjs` | Sets up the daily automatic run |
@@ -158,7 +157,6 @@ All of these only read data.
 | `tools/read_app_usage_stream.mjs` | Sessions from the ScreenTime.AppUsage stream (macOS 27) |
 | `tools/inspect_games_db.mjs` | Whether the protected Games.RecentlyPlayed database can be read |
 | `tools/investigate_iphone_day.mjs` | One iPhone day hour by hour, to compare with Apple's hourly bars |
-| `tools/download_chart_js.mjs` | Saves Chart.js locally so the dashboard works offline (this one downloads, and writes to `public/vendor/`) |
 
 ## Known limitations
 

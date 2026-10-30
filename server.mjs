@@ -50,9 +50,8 @@ const CONTENT_TYPES = {
   ".ico": "image/x-icon",
 };
 
-// Friendly page paths. /apps shows the previous dashboard until the new
-// Apps page replaces it.
-const PAGES = { "/": "today.html", "/apps": "old_dashboard.html", "/organize": "organize.html" };
+// Friendly page paths
+const PAGES = { "/": "today.html", "/apps": "apps.html", "/organize": "organize.html" };
 
 class HttpError extends Error {
   constructor(status, message) {
@@ -328,8 +327,5 @@ server.on("error", (err) => {
 server.listen(PORT, HOST, () => {
   const address = `http://localhost:${PORT}`;
   console.log(`Screen Time dashboard: ${address}  (Ctrl+C to stop)`);
-  if (!fs.existsSync(path.join(PUBLIC_DIR, "vendor", "chart.umd.min.js"))) {
-    console.log("Tip: run  node tools/download_chart_js.mjs  once so the dashboard works offline.");
-  }
   if (process.platform === "darwin" && !process.argv.includes("--no-open")) execFile("open", [address]);
 });

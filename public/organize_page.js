@@ -355,6 +355,13 @@ document.getElementById("search").addEventListener("input", (e) => {
 
 // ---------- start ----------
 
+// Coming from the Apps page's "Rename it" link: start with that app found
+const fromLink = /(?:^#|&)search=([^&]*)/.exec(location.hash);
+if (fromLink) {
+  state.search = decodeURIComponent(fromLink[1]);
+  document.getElementById("search").value = state.search;
+}
+
 try {
   await reload();
   renderCategories();
