@@ -82,6 +82,118 @@ export function categoryName(data, key) {
   return data.categories[key].name;
 }
 
+// ---------- shared charts ----------
+// Used by the Today page and the app and category views on the Apps page.
+
+export const hourName = (h) => (h === 0 ? "12 AM" : h < 12 ? h + " AM" : h === 12 ? "12 PM" : h - 12 + " PM");
+const MON_FIRST = [1, 2, 3, 4, 5, 6, 0]; // weekday numbers in Monday-first order
+
+// A line through weekly values, one point per week. weeks is a list of
+//   { label, value, low, high, current, chosen, tip, attrs }
+// value: the week's number (null for no data). low and high: optional, the
+// ends of a gray band behind the point (like the lightest and heaviest day).
+// current: this week, not over yet (hollow point, dotted line, "so far").
+// chosen: outlined. attrs: extra attributes, which also make the week a button.
+// Options: format(value) for the labels, average for a dashed line, and
+// floor, the least the top of the chart can be.
+export function weekLineHtml(weeks, { format, average = null, floor = 0 } = {}) {
+  const n = weeks.length;
+  const highs = weeks.filter((w) => w.value !== null).map((w) => w.high ?? w.value);
+  const top = Math.max(floor, average ?? 0, ...highs, 0) * 1.08 || 1;
+  const pct = (v) => (v / top) * 100;
+
+  // Solid between finished weeks, dotted into this week, with a break
+  // wherever a week has no data
+  const x = (i) => ((i + 0.5) * 100).toFixed(1);
+  const y = (w) => (100 - pct(w.value)).toFixed(2);
+  let solid = "", soFar = "";
+  weeks.forEach((w, i) => {
+    if (w.value === null) return;
+    const prev = weeks[i - 1];
+    const joined = prev && prev.value !== null;
+    if (w.current) { if (joined) soFar = "M" + x(i - 1) + " " + y(prev) + " L" + x(i) + " " + y(w); }
+    else solid += (joined ? " L" : " M") + x(i) + " " + y(w);
+  });
+
+  const cols = weeks.map((w, i) => {
+    const tag = w.attrs ? "button" : "div";
+    const band = w.value !== null && w.low !== undefined && w.low !== null
+      ? '<span class="week-band" style="bottom:' + pct(w.low).toFixed(2) + "%;height:" + (pct(w.high) - pct(w.low)).toFixed(2) + '%"></span>'
+      : "";
+    const dot = w.value === null ? "" :
+      '<span class="week-dot' + (w.current ? " so-far" : "") + '" style="bottom:' + pct(w.value).toFixed(2) + '%"></span>';
+    return "<" + tag + ' class="week-col' + (w.chosen ? " chosen" : "") + (w.attrs ? " clickable" : "") + '" style="left:' +
+      (i * 100 / n).toFixed(3) + "%;width:" + (100 / n).toFixed(3) + '%"' + (w.attrs ? " " + w.attrs : ' tabindex="0"') +
+      (w.tip ? ' data-tip="' + esc(w.tip) + '"' : "") + ">" + band + dot + "</" + tag + ">";
+  });
+  const labels = weeks.map((w) =>
+    '<div><span class="label' + (w.chosen ? " on" : "") + '">' + esc(w.label) + "</span>" +
+    '<span class="time">' + (w.value === null ? "–" : format(w.value)) + (w.current && w.value !== null ? "<small>so far</small>" : "") +
+    "</span></div>");
+  return '<div class="week-plot">' + cols.join("") +
+    '<svg class="week-line" viewBox="0 0 ' + n * 100 + ' 100" preserveAspectRatio="none" aria-hidden="true">' +
+    '<path d="' + solid.trim() + '"></path><path class="so-far" d="' + soFar + '"></path></svg>' +
+    (average === null ? "" : '<div class="avg-line" style="bottom:' + pct(average).toFixed(1) + '%"></div>') +
+    "</div>" +
+    '<div class="bar-labels week-labels">' + labels.join("") + "</div>";
+}
+
+// Shades come from your own values, so they show your lighter and heavier
+// hours whatever your usual amount is: each shade is about a fifth of the
+// values. With too few values, the fallback steps are used.
+export function quintileSteps(values, round, fallback) {
+  const sorted = values.filter((v) => v > 0).sort((a, b) => a - b);
+  if (sorted.length < 10) return fallback;
+  const at = (share) => sorted[Math.min(sorted.length - 1, Math.floor(share * sorted.length))];
+  const steps = [0.2, 0.4, 0.6, 0.8].map((share) => Math.max(round, Math.round(at(share) / round) * round));
+  for (let i = 1; i < steps.length; i++) if (steps[i] <= steps[i - 1]) steps[i] = steps[i - 1] + round;
+  return steps;
+}
+
+export function heatLevel(secs, steps) {
+  const step = steps.findIndex((limit) => secs < limit);
+  return step === -1 ? 5 : step + 1;
+}
+
+// A shade from 1 (least) to 5 (most): grays, or lighter and darker versions
+// of a category color
+const shade = (level, color) =>
+  color ? "color-mix(in srgb, " + color + " " + [0, 22, 42, 62, 82, 100][level] + "%, var(--surface))" : "var(--heat-" + level + ")";
+
+// Weekday by hour: sums[weekday][hour] is the time in that hour over the
+// days counted, counts[weekday] how many of each weekday were counted. Shows
+// the average per hour. color: a category color, or grays without one.
+// chosen: a weekday number to bold.
+export function weekdayHourHtml(sums, counts, { color = null, chosen = -1 } = {}) {
+  const avg = sums.map((row, w) => row.map((s) => (counts[w] ? s / counts[w] : 0)));
+  const steps = quintileSteps(avg.flat(), 60, [5, 15, 30, 45].map((m) => m * 60));
+  const rows = MON_FIRST.map((w) => {
+    const cells = avg[w].map((s, h) => {
+      const text = WEEKDAYS[w] + "s, " + hourName(h) + ": " + (counts[w] ? fmt(s) + " on average" : "no data");
+      const bg = !counts[w] ? "" : s < 30 ? "background:var(--lane)" : "background:" + shade(heatLevel(s, steps), color);
+      return '<span class="hour-cell' + (counts[w] ? " has" : "") + '" style="' + bg + '" data-tip="' + esc(text) + '"></span>';
+    }).join("");
+    return '<span class="hour-day' + (w === chosen ? " chosen" : "") + '">' + WEEKDAYS[w].slice(0, 3) + "</span>" +
+      '<div class="hour-row">' + cells + "</div>";
+  }).join("");
+  const keys = [1, 2, 3, 4, 5].map((n, i) =>
+    '<span class="cal-key" style="background:' + shade(n, color) + '" data-tip="' +
+    (i === 0 ? "Under " + fmt(steps[0]) : i === 4 ? fmt(steps[3]) + " or more" : fmt(steps[i - 1]) + " to " + fmt(steps[i])) +
+    '"></span>').join("");
+  return '<div class="hour-grid">' + rows +
+    '<span></span><div class="hour-axis"><span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>12a</span></div></div>' +
+    '<div class="cal-legend"><span>Average per hour</span><span>less ' + keys + " more</span></div>";
+}
+
+// Adds a stretch of time to sums[weekday][hour], split across the hours it covers
+export function addToHours(sums, weekday, start, end) {
+  for (let t = start; t < end;) {
+    const upTo = Math.min(end, (Math.floor(t / 3600) + 1) * 3600);
+    sums[weekday][Math.floor((t % DAY) / 3600)] += upTo - t;
+    t = upTo;
+  }
+}
+
 // ---------- hover details ----------
 // Anything with data-tip shows it right away on hover, or on keyboard focus.
 // The page needs <div class="tip" id="tip" role="tooltip" hidden></div>.

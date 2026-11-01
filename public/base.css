@@ -19,9 +19,9 @@
   --empty: #C8C8CE;
   --untracked: #C2C2C7;
   --untracked-stripes: repeating-linear-gradient(135deg, #C2C2C7 0 3px, #ECECF0 3px 6px);
-  /* category colors, softened: the 10 colors you can pick on Organize, in
+  /* category colors, softened: the 12 colors you can pick on Organize, in
      order (Blue, Orange, Aqua, Yellow, Pink, Green, Violet, Red, Sky,
-     Brown), and Other */
+     Brown, Indigo, Plum), and Other */
   --cat-1: #7EA6DC;
   --cat-2: #EC9F7F;
   --cat-3: #76C3A2;
@@ -32,6 +32,8 @@
   --cat-8: #E58C8C;
   --cat-9: #86CBE3;
   --cat-10: #C2A07F;
+  --cat-11: #6F7FC4;
+  --cat-12: #B47FAE;
   --cat-other: #C8C8CD;
   /* neutral grays for amounts (calendar, hours), least to most */
   --heat-1: #EDEDF0;
@@ -106,6 +108,54 @@ button, input, select { font: inherit; }
 .seg.small button { font-size: 13px; padding: 6px 12px; min-height: 34px; }
 .seg.small button[aria-pressed="true"] { background: var(--surface); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); }
 
+
+/* ---------- shared charts (common.js): week lines and weekday-by-hour grids ---------- */
+
+/* dashed average line and its key */
+.avg-line { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--ink); z-index: 1; pointer-events: none; }
+.avg-key { display: inline-block; width: 18px; border-top: 2px dashed var(--ink); vertical-align: middle; margin-right: 6px; }
+
+/* labels under a chart's columns */
+.bar-labels { display: flex; gap: 10px; }
+.bar-labels.many { gap: 3px; }
+.bar-labels div { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.bar-labels .label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.bar-labels .label.on { color: var(--ink); font-weight: 700; }
+.bar-labels .time { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.bar-labels.many div { overflow: visible; }
+
+/* week by week: a line through each week's average, with a gray band
+   from its lightest day to its heaviest */
+.week-plot { position: relative; flex: 1; min-height: 200px; margin-top: 8px; border-bottom: 1px solid var(--line); }
+.week-col { position: absolute; top: 0; bottom: 0; border: 0; background: none; padding: 0; border-radius: 10px; }
+.week-col:hover { background: var(--lane); }
+.week-col.clickable { cursor: pointer; }
+.week-labels { gap: 0; }
+.week-band { position: absolute; left: 50%; width: 18px; margin-left: -9px; min-height: 6px; border-radius: 9px; background: rgba(0, 0, 0, 0.08); }
+.week-col.chosen .week-band { background: rgba(0, 0, 0, 0.16); }
+.week-dot { position: absolute; left: 50%; z-index: 2; width: 12px; height: 12px; margin: 0 0 -6px -6px; border-radius: 50%; background: var(--ink); }
+.week-dot.so-far { background: var(--surface); box-shadow: inset 0 0 0 2px var(--ink); }
+.week-col.chosen .week-dot { outline: 2px solid var(--ink); outline-offset: 3px; }
+.week-line { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.week-line path { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.week-line path.so-far { stroke-dasharray: 1 6; }
+.bar-labels .time small { display: block; text-align: center; font-size: 11px; font-weight: 500; color: var(--muted); line-height: 1.2; }
+
+/* legend under the hours of the week */
+.cal-legend { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--muted); }
+.cal-legend span { display: flex; align-items: center; gap: 6px; }
+.cal-key { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
+.cal-key.empty { border: 1.5px dashed var(--empty); }
+
+/* hours of the week (grays) */
+.hour-grid { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 8px 10px; align-items: center; }
+.hour-day { font-size: 12px; color: var(--muted); }
+.hour-day.chosen { color: var(--ink); font-weight: 700; }
+.hour-row { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; }
+.hour-cell { height: 32px; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--line); }
+.hour-cell.has { box-shadow: none; }
+.hour-axis { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+
 /* hover details */
 .tip { position: fixed; z-index: 10; max-width: 280px; pointer-events: none; background: var(--ink); color: #FFFFFF;
   font-size: 13px; line-height: 1.45; padding: 8px 11px; border-radius: 10px; white-space: pre-line;
@@ -114,4 +164,8 @@ button, input, select { font: inherit; }
 
 @media (max-width: 560px) {
   .card { padding: 18px; }
+  .bar-labels .time { font-size: 11px; }
+  .hour-row { gap: 2px; }
+  .hour-cell { height: 20px; border-radius: 2px; }
+  .week-plot { min-height: 160px; }
 }

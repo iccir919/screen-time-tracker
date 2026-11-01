@@ -1,13 +1,14 @@
 /* public/apps.css: styles for the Apps page (shared pieces are in base.css) */
 
 .apps-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 20px; padding-top: 8px; }
-.apps-head h1 { font-size: clamp(36px, 7vw, 48px); font-weight: 800; letter-spacing: -0.035em; line-height: 1.05; }
+.apps-head h1 { font-size: clamp(36px, 7vw, 48px); font-weight: 800; letter-spacing: -0.035em; line-height: 1.05; overflow-wrap: anywhere; }
+.head-title { min-width: 0; }
 .summary { margin: 6px 0 0; font-size: 17px; color: var(--ink-2); }
 .filters { display: flex; flex-wrap: wrap; gap: 10px; }
 
-.apps-layout { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
-.list-card { flex: 999 1 600px; padding: 8px 0 16px; gap: 0; }
-.detail { flex: 1 1 320px; gap: 20px; }
+.list-view { display: flex; flex-direction: column; gap: 22px; }
+.list-view[hidden], .detail-view[hidden] { display: none; }
+.list-card { padding: 8px 0 16px; gap: 0; }
 
 /* category chips above the list */
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -30,7 +31,7 @@
 .app-line .num { text-align: right; }
 .app-line .per-day { font-weight: 600; }
 .app-line .opens { color: var(--ink-2); }
-.app-line .change { font-size: 14px; font-weight: 600; }
+.app-line .change { font-size: 14px; font-weight: 600; color: var(--ink-2); }
 .app-line .change.flat { color: var(--muted); font-weight: 500; }
 .app-who { display: flex; flex-direction: column; min-width: 0; text-align: left; border: 0; background: none; padding: 0;
   color: inherit; cursor: pointer; }
@@ -39,11 +40,17 @@
 .spark { width: 100%; height: 30px; display: block; }
 .spark polyline { fill: none; stroke-width: 2.2; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 
-.group-head { display: grid; grid-template-columns: 6px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 18px 24px 8px; }
-.group-head .stripe { width: 6px; height: 22px; border-radius: 3px; }
+.group-head { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 20px 24px 10px;
+  width: 100%; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.group-head:hover { background: var(--lane); }
+.group-head .group-name { font-size: 20px; font-weight: 700; text-decoration: underline; text-decoration-color: var(--line);
+  text-decoration-thickness: 2px; text-underline-offset: 6px; }
+.group-head:hover .group-name { text-decoration-color: var(--ink); }
+.group-head .open-mark { color: var(--muted); font-size: 18px; font-weight: 600; }
+.group-head .stripe { width: 8px; height: 28px; border-radius: 4px; }
 .group-head b { font-size: 16px; font-weight: 700; }
 .group-head .muted { font-size: 14px; }
-.group-time { font-size: 16px; font-weight: 700; padding-right: 156px; }
+.group-time { font-size: 18px; font-weight: 700; padding-right: 156px; }
 .group-more { display: block; margin: 0; border: 0; border-top: 1px solid var(--track); width: 100%; text-align: left; background: none;
   padding: 9px 24px 9px 44px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; }
 .group-more:hover { color: var(--ink); background: var(--lane); }
@@ -51,24 +58,42 @@
   text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .list-empty { padding: 24px; }
 
-/* the selected app */
-.detail-head { display: flex; flex-direction: column; gap: 4px; }
-.detail-head .label { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 7px; }
-.detail { --cat: var(--cat-other); }
-.detail-head h2 { font-size: 30px; font-weight: 800; letter-spacing: -0.025em; overflow-wrap: anywhere; }
-.detail-head .line { font-size: 15px; color: var(--ink-2); }
-.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.fact { background: var(--lane); border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.fact span { font-size: 12px; color: var(--muted); }
-.fact b { font-size: 17px; font-weight: 700; line-height: 1.25; white-space: nowrap; }
-.detail h3 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
-.mini-bars { display: flex; align-items: flex-end; gap: 2px; height: 72px; }
-.mini-bars .b { flex: 1 1 0; min-width: 0; border-radius: 3px 3px 1px 1px; background: var(--cat); min-height: 2px; }
-.mini-bars .b.zero { background: var(--track); }
-.mini-bars .b.none { background: none; border-top: 2px dashed var(--empty); border-radius: 0; height: 0 !important; min-height: 0; }
-.mini-bars .b.gap { background: var(--untracked-stripes); }
-a.b:hover, .b:hover { filter: brightness(0.88); }
-.mini-axis { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 4px; }
+/* the view of one app or one category */
+.back-link { border: 0; background: none; padding: 6px 0; margin-bottom: 6px; font: inherit; font-size: 14px; font-weight: 600;
+  color: var(--muted); cursor: pointer; }
+.back-link:hover { color: var(--ink); }
+.detail-kicker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
+.cat-link { display: inline-flex; align-items: center; gap: 7px; font: inherit; font-size: 14px; font-weight: 600; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px 6px 10px; cursor: pointer; }
+.cat-link:hover { border-color: var(--ink); }
+.cat-link .open-mark { color: var(--muted); }
+.detail-view { display: flex; flex-direction: column; gap: 20px; }
+.detail-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--card-line); border-radius: 16px; padding: 14px 18px;
+  display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.stat span { font-size: 13px; color: var(--muted); }
+.stat b { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; }
+.detail-grid { display: flex; flex-wrap: wrap; gap: 20px; }
+.detail-grid > .card { flex: 1 1 420px; }
+.detail-grid .card { min-height: 330px; }
+.detail-grid .card .hint:last-child { margin-top: auto; }
+.card-head .hint b { color: var(--ink); }
+.members { display: flex; flex-direction: column; }
+.member { display: grid; grid-template-columns: minmax(0, 1.3fr) 80px minmax(0, 1.6fr) minmax(0, 1fr) 72px 64px; gap: 14px;
+  align-items: center; width: 100%; padding: 10px 0; border: 0; border-top: 1px solid var(--track); background: none;
+  font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.member.head { cursor: default; border-top: 0; padding-top: 0; font-size: 13px; color: var(--muted); }
+.member:not(.head):hover { background: var(--lane); }
+.member .num { text-align: right; }
+.member-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member-device { font-size: 13px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member-share { display: flex; align-items: center; gap: 10px; }
+.member-share .bar-track { display: block; flex: 1; height: 8px; }
+.member-share .bar-fill { display: block; }
+.member-pct { width: 40px; text-align: right; font-size: 13px; color: var(--muted); }
+.member-trend { width: 100%; height: 26px; }
+.member-trend polyline { fill: none; stroke-width: 2.2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.member-time { font-weight: 600; }
 .detail-link { font-size: 14px; font-weight: 600; text-underline-offset: 3px; }
 
 @media (max-width: 560px) {
@@ -81,6 +106,21 @@ a.b:hover, .b:hover { filter: brightness(0.88); }
   .group-time { padding-right: 60px; }
   .group-more { padding-left: 16px; }
   .show-all { margin-left: 16px; }
-  .facts { gap: 6px; }
-  .fact b { font-size: 16px; }
+  .detail-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .stat { padding: 12px 14px; }
+  .stat b { font-size: 21px; }
+  .detail-grid .card { min-height: 0; }
+  /* narrow screens: name, time and change on top; the share bar and the
+     line underneath */
+  .member { grid-template-columns: minmax(0, 1fr) 60px 52px; row-gap: 6px; }
+  .member.head { display: none; }
+  .member-device { display: none; }
+  .member-name { grid-column: 1; grid-row: 1; }
+  .member-time { grid-column: 2; grid-row: 1; }
+  .member .num:last-child { grid-column: 3; grid-row: 1; }
+  .member-share { grid-column: 1; grid-row: 2; }
+  .member-trend { grid-column: 2 / -1; grid-row: 2; height: 22px; }
+  .group-head .group-name { font-size: 18px; }
+  .group-head .muted { display: none; } /* the app count; its apps are listed right below */
+  .group-time { font-size: 16px; }
 }

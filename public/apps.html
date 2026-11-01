@@ -31,28 +31,27 @@
 
   <div id="content">
     <section class="apps-head">
-      <div>
-        <h1>Your apps</h1>
-        <p class="summary" id="summary"></p>
-      </div>
+      <!-- "Your apps", or the back link and the app's or category's name -->
+      <div class="head-title" id="head-title"></div>
       <div class="filters">
         <div class="seg" id="range-filter" role="group" aria-label="Date range"></div>
         <div class="seg" id="device-filter" role="group" aria-label="Devices"></div>
       </div>
     </section>
 
-    <div class="chips" id="cat-filter" role="group" aria-label="Category"></div>
-
-    <div class="apps-layout">
+    <!-- the list of apps -->
+    <div class="list-view" id="list-view">
+      <div class="chips" id="cat-filter" role="group" aria-label="Category"></div>
       <section class="card list-card">
         <div class="table-scroll">
           <div class="app-table" id="app-table"></div>
         </div>
         <div id="show-all"></div>
       </section>
-
-      <aside class="card detail" id="detail" aria-live="polite"></aside>
     </div>
+
+    <!-- one app or one category, opened from the list -->
+    <div class="detail-view" id="detail-view" hidden></div>
   </div>
 </main>
 <div class="tip" id="tip" role="tooltip" hidden></div>

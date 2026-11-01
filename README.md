@@ -57,7 +57,7 @@ PORT=4000 npm start      # use another port
 It has three pages:
 
 - **Today** (the home page): three cards at the top show the day, the 7-day average and the 30-day average, each with a bar of its categories and split by device. Click a card and the whole page follows it: the timeline (the day, or an average day by hour), the top apps or categories (that day, or per day on average), the bar chart (7 or 30 days with the average drawn in) and the hours of the week. The arrows move back and forward by a day, 7 days or 30 days, and clicking a day in the bar chart shows that day. Below, **Week by week** is a line through each of the last 6 weeks' daily average (this week so far), with a gray band from each week's lightest day to its heaviest; hover for the details, click a week to see it. The device switch (all devices, iPhone or Mac) applies to everything.
-- **Apps**: every app by time per day, for the last 7 days, 30 days or all time, on any or all devices, grouped by category. Each app shows its device, its last 14 days and its change from the period before. Pick a category above the list to see only its apps. Click an app for its opens, typical and longest session, when during the day you use it, and each day (click a day to open it on the Today page).
+- **Apps**: every app by time per day, for the last 7 days, 30 days or all time, on any or all devices, grouped by category. Each app shows its device, its last 14 days and its change from the period before. Pick a category above the list to see only its apps. Click an app, or a category's heading, to open its own view: its numbers for the range, a line through its last 6 weeks (with each week's lightest to heaviest day), its share of all your time week by week, and when during the week you use it. A category's view also lists its apps, each with its own trend.
 - **Organize**: your categories and app names, with each one's time per day (see below).
 
 Color always means category: the color you pick for each one on Organize. Amounts without a category, like the hours of the week, are in grays.
@@ -70,7 +70,7 @@ The pages need no libraries and work without internet. Only the typeface (Plus J
 
 Open the **Organize** page (the link at the top of the dashboard, or http://localhost:3000/organize). Changes save as you make them, and the dashboard uses them the next time it loads.
 
-- **Categories:** add your own and pick each one's color from 10 (click its color). Each category's **⋯** menu renames it, moves it up or down, or deletes it. Deleting a category moves its apps to Other. Other is always there and always gray. The order here is the order on the other pages.
+- **Categories:** add your own and pick each one's color from 12 (click its color). Each category's **⋯** menu renames it, moves it up or down, or deletes it. Deleting a category moves its apps to Other. Other is always there and always gray. The order here is the order on the other pages.
 - **Apps:** rename any app and pick its category. Apps you haven't set yet are listed first. The **Set by** column shows whether an app's name and category come from the built-in list or from you, and **Reset** goes back to the built-in ones.
 
 Common apps start with built-in names and categories (`default_apps.mjs`). Anything else shows as the last part of its app ID, under Other, until you name it. Your categories and app names are saved in your archive database, not in the project files, so they stay private and survive updates.
