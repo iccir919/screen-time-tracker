@@ -11,9 +11,12 @@
 //        App.InFocus          Mac and synced iPhone, every macOS version
 //        ScreenTime.AppUsage  Mac only, macOS 27 and later. Matches Apple's
 //                             Screen Time per-app numbers most closely.
-//   3. Decodes every saved Biome file into app sessions. Decoded sessions are
+//   3. Decodes every saved Biome file into app sessions. Sessions are
 //      rebuilt from the saved files on each run, so a change to the decoding
-//      rules applies to your whole history (and can be undone the same way).
+//      rules applies wherever the files still have the data. Sessions already
+//      in your archive are never dropped: Apple erases records older than
+//      about 4 weeks (and those of deleted apps) inside the files themselves,
+//      so an archived session stays unless a rebuilt one covers the same time.
 //
 // The report, lookup and dashboard (server.mjs) pick the best source for
 // each device and day (see loadRows in screen_time_lib.mjs).
@@ -431,6 +434,28 @@ function folderDevice(folderKey, apps) {
   return { id: "biome:" + folderKey.replace(/^remote\//, ""), model: looksLikeIphone ? "iPhone" : null };
 }
 
+// For sessions sorted by start: a function telling whether a stretch of time
+// overlaps any of them. Uses the latest end so far, so overlapping sessions
+// (like an overlay over an app) are handled too.
+function coverageChecker(sessions) {
+  const sorted = [...sessions].sort((a, b) => a.start - b.start);
+  const starts = sorted.map((s) => s.start);
+  const maxEnd = [];
+  sorted.forEach((s, i) => { maxEnd[i] = Math.max(s.end, i ? maxEnd[i - 1] : -Infinity); });
+  return (start, end) => {
+    // the last session starting before this stretch ends
+    let lo = 0, hi = starts.length - 1, idx = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (starts[mid] < end) { idx = mid; lo = mid + 1; } else hi = mid - 1;
+    }
+    return idx >= 0 && maxEnd[idx] > start;
+  };
+}
+
+// Sessions kept this run that Apple no longer has, across all devices
+let totalKept = 0;
+
 function decodeStream(archive, stream) {
   const backupRoot = path.join(BIOME_RAW_DIR, stream.name);
   if (!fs.existsSync(backupRoot)) return;
@@ -454,7 +479,8 @@ function decodeStream(archive, stream) {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const countRows = archive.prepare("SELECT COUNT(*) AS n FROM app_usage WHERE source = ? AND device_id = ?");
-  const removeRows = archive.prepare("DELETE FROM app_usage WHERE source = ? AND device_id = ?");
+  const archivedRows = archive.prepare("SELECT uuid, start_utc, end_utc FROM app_usage WHERE source = ? AND device_id = ?");
+  const removeRow = archive.prepare("DELETE FROM app_usage WHERE uuid = ?");
   const now = new Date().toISOString();
 
   for (const [key, files] of [...groups].sort()) {
@@ -466,26 +492,38 @@ function decodeStream(archive, stream) {
     const label = `${stream.name} ${device.model ? `${device.model} (${key})` : key}`;
     const before = countRows.get(stream.source, device.id).n;
 
-    // Rebuild this device's sessions from the saved files. If nothing could
-    // be decoded, keep what's already archived rather than wiping it.
+    // Rebuild this device's sessions from the saved files, keeping what's
+    // already archived: an archived session is replaced only where a rebuilt
+    // one covers the same time. Ones Apple has since erased stay. If nothing
+    // could be decoded, nothing changes.
     if (!sessions.length) {
       console.log(`  ${label}: ${files.length} files, no sessions decoded` + (before ? `, kept ${before} archived` : ""));
     } else {
+      const covers = coverageChecker(sessions);
+      const newIds = new Set();
       archive.exec("BEGIN");
-      removeRows.run(stream.source, device.id);
+      let kept = 0;
+      for (const row of archivedRows.all(stream.source, device.id)) {
+        const start = Date.parse(row.start_utc) / 1000, end = Date.parse(row.end_utc) / 1000;
+        if (covers(start, end)) removeRow.run(row.uuid);
+        else kept++;
+      }
       for (const s of sessions) {
         const startMs = s.start * 1000;
+        const uuid = `${stream.source}:${device.id}:${s.app}:${Math.round(startMs)}`;
+        newIds.add(uuid);
         insert.run(
-          `${stream.source}:${device.id}:${s.app}:${Math.round(startMs)}`,
-          device.id, device.model, s.app,
+          uuid, device.id, device.model, s.app,
           new Date(startMs).toISOString(), new Date(s.end * 1000).toISOString(), s.end - s.start,
           localOffsetSecs(startMs), stream.source, now
         );
       }
       archive.exec("COMMIT");
-      const change = sessions.length - before;
-      console.log(`  ${label}: ${files.length} files, ${events.length} events, ${sessions.length} sessions` +
-        ` (${change >= 0 ? "+" : ""}${change})`);
+      const after = countRows.get(stream.source, device.id).n;
+      const change = after - before;
+      totalKept += kept;
+      console.log(`  ${label}: ${files.length} files, ${events.length} events, ${sessions.length} sessions from Apple's files` +
+        `, ${kept} kept that Apple no longer has, ${after} archived (${change >= 0 ? "+" : ""}${change})`);
     }
 
     const problems = [];
@@ -542,10 +580,12 @@ function main() {
   console.log("Biome decode");
   for (const stream of STREAMS) decodeStream(archive, stream);
   printSummary(archive);
+  console.log(`\nKept ${totalKept} archived sessions that Apple's files no longer have.`);
   // Only count it as an update if Apple's files could be read. Otherwise
   // the dashboard would say "Updated just now" when nothing new came in.
   if (!permissionDenied) {
     archive.prepare("INSERT OR REPLACE INTO archive_info (key, value) VALUES ('last_run', ?)").run(new Date().toISOString());
+    archive.prepare("INSERT OR REPLACE INTO archive_info (key, value) VALUES ('kept_last_run', ?)").run(String(totalKept));
   }
   archive.close();
   if (permissionDenied) process.exitCode = 2;

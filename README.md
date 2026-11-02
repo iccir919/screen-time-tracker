@@ -159,11 +159,14 @@ All of these only read data.
 | `tools/read_app_usage_stream.mjs` | Sessions from the ScreenTime.AppUsage stream (macOS 27) |
 | `tools/inspect_games_db.mjs` | Whether the protected Games.RecentlyPlayed database can be read |
 | `tools/investigate_iphone_day.mjs` | One iPhone day hour by hour, to compare with Apple's hourly bars |
+| `tools/find_deleted_app.mjs` | Looks everywhere for an app's history, including records Apple marked deleted (read-only) |
+| `tools/restore_from_backup.mjs` | Puts back sessions your archive is missing from an older copy of it, after a preview and a backup |
 
 ## Known limitations
 
 - **Unofficial formats.** These are Apple's internal files, not a public API. A macOS update could change them, and the scripts would need updating.
 - **History starts when you start.** The first run can only save what Apple still has, about the last four weeks.
+- **What's archived stays archived.** Apple erases records older than about four weeks, and those of apps you delete, inside its own files. The archiver keeps every session it has already saved, and replaces one only when Apple's files have a corrected version of the same time. Each run reports how many sessions it kept that Apple no longer has. (Versions before November 2026 dropped erased sessions; `tools/restore_from_backup.mjs` can bring them back from an older copy of your archive.)
 - **Time zones.** iPhone sessions from Biome use the Mac's time zone, so days can shift if your phone was in another time zone.
 - **Older devices.** Biome folders from older devices may not decode yet.
 - **Game Mode** hides games from both App.InFocus and ScreenTime.AppUsage. That time shows up as untracked rather than under the game. Untracked time is Mac-only, since the screen-on records come from this Mac.
