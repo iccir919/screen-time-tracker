@@ -20,7 +20,8 @@ import { setupRefresh, showLastArchived } from "./refresh.js";
 import {
   DAY, WEEKDAYS, loadUsage, esc, fmt, dateOf, fmtDate, weekdayOf, isoDay, dayFromIso, fmtClock,
   todayIdx, hideTip, UNTRACKED_KEY, categoryKeys, categoryColor, categoryName,
-  hourName, weekLineHtml, weekdayHourHtml, addToHours,
+  hourName, weekLineHtml, weekdayHourHtml, addToHours, localNow, STEPS, stepTotals, runningTotal, runningTotalHtml,
+  weekdayBarsHtml,
 } from "./common.js";
 
 const SESSION_GAP = 60;          // uses of the same app less than this apart count as one open
@@ -102,7 +103,7 @@ const clampDay = (d) => Math.max(lowestDay, Math.min(todayIdx, d));
 
 // ---------- what you picked ----------
 
-const state = { day: todayIdx, period: "day", device: "all", view: "apps" };
+const state = { day: todayIdx, period: "day", device: "all", view: "apps", weeks: "total" };
 {
   const hash = decodeURIComponent(location.hash.slice(1));
   const params = new URLSearchParams(hash);
@@ -112,6 +113,7 @@ const state = { day: todayIdx, period: "day", device: "all", view: "apps" };
   const device = params.get("device");
   if (device !== null && DATA.devices[Number(device)] !== undefined) state.device = device;
   if (params.get("view") === "categories") state.view = "categories";
+  if (params.get("weeks") === "categories") state.weeks = "categories";
 }
 
 let devs = []; // the chosen devices, as indexes
@@ -126,6 +128,7 @@ function writeAddress() {
   if (state.period !== "day") params.set("period", state.period);
   if (state.device !== "all") params.set("device", state.device);
   if (state.view !== "apps") params.set("view", state.view);
+  if (state.weeks !== "total") params.set("weeks", state.weeks);
   const text = params.toString();
   history.replaceState(null, "", text ? "#" + text : location.pathname);
 }
@@ -385,13 +388,16 @@ function renderTopList() {
     // Untracked goes last; a minute or less of it isn't worth a row
     const keys = [...cats.keys()].filter((k) => k !== UNTRACKED_KEY || cats.get(k) >= 60)
       .sort((a, b) => (a === UNTRACKED_KEY) - (b === UNTRACKED_KEY) || cats.get(b) - cats.get(a));
-    const max = Math.max(...keys.map((k) => cats.get(k)));
-    el.innerHTML = keys.map((key) => {
+    const shownKeys = keys.slice(0, MAX_TOP_ROWS);
+    const max = Math.max(...shownKeys.map((k) => cats.get(k)));
+    const moreCats = keys.length - shownKeys.length;
+    el.innerHTML = shownKeys.map((key) => {
       const members = [...apps].filter(([app]) => catOf(app) === key).sort((a, b) => b[1].secs - a[1].secs).map(([app]) => appName(app));
       const second = key === UNTRACKED_KEY ? "Screen on, no app recorded"
         : members.slice(0, 3).join(", ") + (members.length > 3 ? " and " + (members.length - 3) + " more" : "");
       return row(catName(key), second, cats.get(key), max, catColor(key));
-    }).join("") + '<a class="more-link" href="/organize">Edit categories</a>';
+    }).join("") + '<a class="more-link" href="/apps">' +
+      (moreCats > 0 ? "and " + moreCats + " more " + (moreCats === 1 ? "category" : "categories") : "All categories") + "</a>";
     return;
   }
 
@@ -416,12 +422,14 @@ function renderTopList() {
 function renderBars() {
   const isDay = state.period === "day";
   const n = state.period === "30" ? 30 : 7;
-  const win = isDay ? { from: state.day - 6, to: state.day } : periodWindow(state.period);
+  // For a day: that day and the 7 before it, so the same weekday a week
+  // earlier is in view (outlined) to compare with
+  const win = isDay ? { from: state.day - 7, to: state.day } : periodWindow(state.period);
   const days = [];
   for (let d = win.from; d <= win.to; d++) days.push(d);
   const avg = isDay ? null : average(periodDays(state.period), total);
   document.getElementById("bars-title").textContent = isDay
-    ? (state.day === todayIdx ? "Last 7 days" : "7 days to " + fmtDate(state.day, { month: "short", day: "numeric" }))
+    ? (state.day === todayIdx ? "Last 8 days" : "8 days to " + fmtDate(state.day, { month: "short", day: "numeric" }))
     : (n === 30 ? "Last 30 days" : "Last 7 days") + (state.day === todayIdx ? ", not counting today" : "");
   document.getElementById("bars-hint").innerHTML = isDay ? "Click a day to see it"
     : '<span class="avg-key"></span>' + n + "-day average " + (avg === null ? "–" : "<b>" + fmt(avg) + "</b>");
@@ -447,6 +455,7 @@ function renderBars() {
   const labels = days.map((d, i) => {
     const on = isDay && d === state.day;
     let text = d === todayIdx ? "Today" : fmtDate(d, { weekday: "short" });
+    if (isDay && d === state.day - 7) text = "Last " + text;
     if (many) text = (days.length - 1 - i) % 7 === 0 ? fmtDate(d, { month: "short", day: "numeric" }) : "";
     return '<div><span class="label' + (on ? " on" : "") + '">' + esc(text) + "</span>" +
       (many ? "" : '<span class="time">' + (anyData(d) ? fmt(total(d)) : "–") + "</span>") + "</div>";
@@ -475,6 +484,8 @@ function renderWeeks() {
     const to = Math.min(from + 6, todayIdx - 1);
     const days = [];
     for (let d = from; d <= to; d++) if (anyData(d)) days.push(d);
+    // On a Monday no full day of this week has passed, so show today so far
+    if (!days.length && from === thisMonday && anyData(todayIdx)) days.push(todayIdx);
     const totals = days.map(total);
     weeks.push({
       from, days, current: from === thisMonday, avg: average(days, total),
@@ -485,8 +496,11 @@ function renderWeeks() {
   }
   const overall = average(weeks.flatMap((w) => w.days), total);
   const chosen = mondayOf(state.day);
-  document.getElementById("weeks-hint").innerHTML = '<span class="avg-key"></span>6-week average ' +
-    (overall === null ? "–" : "<b>" + fmt(overall) + "</b>");
+  document.getElementById("weeks-switch").innerHTML = [["total", "Total"], ["categories", "Categories"]].map(([v, text]) =>
+    '<button data-weeks="' + v + '" aria-pressed="' + (v === state.weeks) + '">' + text + "</button>").join("");
+  document.getElementById("weeks-avg").innerHTML = state.weeks === "total" && overall !== null
+    ? '<span class="avg-key"></span>6-week average <b>' + fmt(overall) + "</b>" : "";
+  if (state.weeks === "categories") return renderWeekCategories(weeks);
 
   const short = (d) => fmtDate(d, { month: "short", day: "numeric" });
   const dayText = (d) => fmtDate(d, { weekday: "short" }) + " " + fmt(total(d));
@@ -511,20 +525,78 @@ function renderWeeks() {
   }), { format: fmt, average: overall, floor: 3600 });
 }
 
+// Week by week, by category: each category's last 6 weeks as a small line,
+// its daily average this week, and this week against its 6-week average.
+// Every category with time in the 6 weeks, biggest first; Untracked isn't a
+// category, so it's left out.
+function renderWeekCategories(weeks) {
+  const current = weeks[weeks.length - 1];
+  // On a Monday "this week" is only today so far, which isn't a full day to
+  // compare with an average, so until this week has a full day the columns
+  // show last week instead
+  const useLast = !current.days.length || current.days[0] === todayIdx;
+  const compared = useLast ? weeks[weeks.length - 2] : current;
+  const full = useLast ? weeks.slice(0, -1) : weeks; // the average leaves out a partial Monday
+  const all = categoryTotals(full.flatMap((w) => w.days));
+  const now = categoryTotals(compared.days);
+  const keys = CAT_KEYS.filter((k) => k !== UNTRACKED_KEY && (all.get(k) ?? 0) > 0).sort((a, b) => all.get(b) - all.get(a));
+  const shown = keys;
+  const perWeek = weeks.map((w) => categoryTotals(w.days));
+  const rows = shown.map((key) => {
+    const vals = perWeek.map((m, i) => (weeks[i].days.length ? m.get(key) ?? 0 : null));
+    const max = Math.max(...vals.filter((v) => v !== null), 1);
+    const x = (i) => ((i / (vals.length - 1)) * 100).toFixed(1);
+    const y = (v) => (22 - (v / max) * 18).toFixed(1);
+    const pts = vals.map((v, i) => [i, v]).filter(([, v]) => v !== null);
+    const done = pts.filter(([i]) => !weeks[i].current);
+    const last = pts.find(([i]) => weeks[i].current);
+    const prev = done[done.length - 1];
+    const color = catColor(key);
+    const svg = '<svg class="cat-trend" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">' +
+      '<polyline points="' + done.map(([i, v]) => x(i) + "," + y(v)).join(" ") + '" style="stroke:' + color + '"></polyline>' +
+      (last && prev ? '<polyline class="so-far" points="' + x(prev[0]) + "," + y(prev[1]) + " " + x(last[0]) + "," + y(last[1]) + '" style="stroke:' + color + '"></polyline>' : "") +
+      "</svg>";
+    const avg = all.get(key) ?? 0, thisWeek = compared.days.length ? now.get(key) ?? 0 : null;
+    let vs = "–";
+    if (thisWeek !== null && avg >= 60) {
+      const pct = Math.round(((thisWeek - avg) / avg) * 100);
+      vs = pct === 0 ? "0%" : (pct > 0 ? "+" : "−") + Math.abs(pct) + "%";
+    }
+    const tip = catName(key) + "\n" + (useLast ? "Last week" : "This week") + ": " + (thisWeek === null ? "no data" : fmt(thisWeek) + " a day") +
+      "\n6-week average: " + fmt(avg) + " a day" + (useLast ? "\nThis week is compared once it has a full day" : "") + "\nClick to open it";
+    return '<a class="cat-week" href="/apps#show=cat:' + encodeURIComponent(String(key)) + '" data-tip="' + esc(tip) + '">' +
+      '<span class="cat-week-name"><span class="swatch" style="background:' + color + '"></span>' + esc(catName(key)) + "</span>" +
+      svg + '<span class="num">' + (thisWeek === null ? "–" : fmt(thisWeek)) + '</span><span class="num vs">' + vs + "</span></a>";
+  });
+  document.getElementById("weeks").innerHTML = '<div class="cat-weeks">' +
+    '<div class="cat-week head"><span>Category</span><span>Last 6 weeks</span><span class="num">' + (useLast ? "Last week" : "This week") +
+    '</span><span class="num">vs avg</span></div>' +
+    rows.join("") + "</div>";
+}
+
+
 // ---------- the hours of the week (grays) ----------
 
 // Weekday by hour: the average time in each hour. For a day, over the last
 // 6 weeks (today left out while it's going); for 7 or 30 days, over the period.
-function renderHours() {
-  const isDay = state.period === "day";
+// The days the hours of the week and your weekdays are averaged over: for
+// a day, the last 6 weeks (today left out while it's going); for 7 or 30
+// days, the period
+function weekdayDays() {
   const days = [];
-  if (isDay) {
+  if (state.period === "day") {
     for (let d = Math.max(weeksStart, firstDay); d < todayIdx; d++) if (anyData(d)) days.push(d);
   } else {
     days.push(...periodDays(state.period));
   }
   const win = periodWindow(state.period);
-  document.getElementById("hours-hint").textContent = isDay ? "Last 6 weeks" : rangeText(win.from, win.to);
+  return { days, label: state.period === "day" ? "Last 6 weeks" : rangeText(win.from, win.to) };
+}
+
+function renderHours() {
+  const isDay = state.period === "day";
+  const { days, label } = weekdayDays();
+  document.getElementById("hours-hint").textContent = label;
   const sums = Array.from({ length: 7 }, () => new Array(24).fill(0));
   const counts = new Array(7).fill(0);
   for (const d of days) {
@@ -534,6 +606,71 @@ function renderHours() {
   }
   document.getElementById("hours-heatmap").innerHTML =
     weekdayHourHtml(sums, counts, { chosen: isDay ? weekdayOf(state.day) : -1 });
+}
+
+// ---------- your weekdays: the average day for each weekday ----------
+
+function renderWeekdays() {
+  const { days, label } = weekdayDays();
+  document.getElementById("weekdays-hint").textContent = label;
+  const byWeekday = Array.from({ length: 7 }, () => []);
+  for (const d of days) byWeekday[weekdayOf(d)].push(d);
+  const avgDays = byWeekday.map((ds) => {
+    if (!ds.length) return null;
+    const cats = categoryTotals(ds); // already divided by the number of days
+    const parts = CAT_KEYS.filter((k) => (cats.get(k) ?? 0) > 0).map((k) => [catColor(k), cats.get(k), catName(k)]);
+    return { total: parts.reduce((a, p) => a + p[1], 0), parts };
+  });
+  document.getElementById("weekdays").innerHTML =
+    weekdayBarsHtml(avgDays, { chosen: state.period === "day" ? weekdayOf(state.day) : -1, hint: label.toLowerCase() });
+}
+
+// ---------- running total: the day added up, against the same weekday ----------
+
+// For a day: its time added up through the day, next to the same weekday a
+// week before and the average for that weekday over the 6 weeks before.
+// For 7 or 30 days: the period's average day added up, next to the period
+// before's. The card is always there, so the page keeps one layout.
+function renderRunning() {
+  const spans = (d) => items(d).map(([, , s, e]) => [s, e]);
+  const line = (d) => runningTotal(stepTotals(spans(d), d));
+  const averageLine = (days) => {
+    if (!days.length) return null;
+    const lines = days.map(line);
+    return lines[0].map((_, i) => lines.reduce((a, l) => a + l[i], 0) / lines.length);
+  };
+  if (state.period !== "day") {
+    const win = periodWindow(state.period);
+    const n = Number(state.period);
+    const days = periodDays(state.period);
+    const before = [];
+    for (let d = win.from - n; d < win.from; d++) if (anyData(d)) before.push(d);
+    document.getElementById("run-title").textContent = "An average day, added up";
+    document.getElementById("run-hint").textContent = "Against the " + n + " days before";
+    const main = averageLine(days);
+    document.getElementById("run").innerHTML = main
+      ? runningTotalHtml({ main, last: averageLine(before), avg: null },
+        { main: rangeText(win.from, win.to), last: rangeText(win.from - n, win.from - 1), avg: "" })
+      : '<p class="hint">No data in this period.</p>';
+    return;
+  }
+  const w = weekdayOf(state.day);
+  const isToday = state.day === todayIdx;
+  const lastDay = state.day - 7;
+  const before = [];
+  for (let k = 1; k <= 6; k++) if (anyData(state.day - 7 * k)) before.push(line(state.day - 7 * k));
+  const avg = before.length ? before[0].map((_, i) => before.reduce((a, l) => a + l[i], 0) / before.length) : null;
+  const nowStep = isToday ? ((localNow() % DAY) / DAY) * STEPS : null;
+  document.getElementById("run-title").textContent = isToday ? "So far today" : "Through the day, added up";
+  document.getElementById("run-hint").textContent = isToday ? "By " + fmtClock(localNow()) : "The whole day";
+  document.getElementById("run").innerHTML = runningTotalHtml(
+    { main: line(state.day), last: anyData(lastDay) ? line(lastDay) : null, avg },
+    {
+      main: isToday ? "Today" : fmtDate(state.day, { weekday: "short", month: "short", day: "numeric" }),
+      last: isToday ? "Last " + WEEKDAYS[w] : fmtDate(lastDay, { weekday: "short", month: "short", day: "numeric" }),
+      avg: "Average " + WEEKDAYS[w] + " (" + before.length + (before.length === 1 ? " week" : " weeks") + ")",
+    },
+    nowStep);
 }
 
 // ---------- clicks ----------
@@ -553,6 +690,11 @@ document.getElementById("next").addEventListener("click", () =>
 document.getElementById("period-cards").addEventListener("click", (e) => {
   const card = e.target.closest("[data-period]");
   if (card) update({ period: card.dataset.period });
+});
+
+document.getElementById("weeks-switch").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-weeks]");
+  if (b) update({ weeks: b.dataset.weeks });
 });
 
 document.getElementById("view-switch").addEventListener("click", (e) => {
@@ -587,9 +729,11 @@ function render() {
   renderLegend();
   renderTimeline();
   renderTopList();
+  renderRunning();
   renderBars();
   renderWeeks();
   renderHours();
+  renderWeekdays();
 }
 
 setDevices();

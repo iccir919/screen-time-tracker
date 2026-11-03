@@ -36,7 +36,22 @@
 .legend > span { display: inline-flex; align-items: center; gap: 7px; }
 .legend-link { margin-left: auto; color: var(--muted); font-weight: 600; text-underline-offset: 3px; }
 
-#weeks { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+#weeks, .weekdays { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.head-right { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 12px; }
+.head-right .hint b { color: var(--ink); }
+/* week by week, by category */
+.cat-weeks { display: flex; flex-direction: column; flex: 1; }
+.cat-week { display: grid; grid-template-columns: minmax(0, 1fr) minmax(80px, 140px) 64px 54px; gap: 12px; align-items: center;
+  padding: 5px 4px; border-top: 1px solid var(--track); color: inherit; text-decoration: none; border-radius: 8px; }
+.cat-week.head { border-top: 0; padding-top: 0; font-size: 13px; color: var(--muted); }
+a.cat-week:hover { background: var(--lane); }
+.cat-week .num { text-align: right; font-weight: 600; font-size: 14px; }
+.cat-week.head .num { font-weight: 400; font-size: 13px; }
+.cat-week .vs { font-weight: 500; color: var(--ink-2); }
+.cat-week-name { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cat-trend { width: 100%; height: 26px; }
+.cat-trend polyline { fill: none; stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.cat-trend .so-far { stroke-dasharray: 1 5; }
 
 .two-col { display: flex; flex-wrap: wrap; gap: 20px; }
 .two-col > .card { flex: 1 1 420px; }
@@ -68,22 +83,13 @@
 .app-name b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-name span { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-time { font-weight: 600; text-align: right; }
+/* the list keeps room for 8 rows, so its row of cards keeps one height */
+#top-apps { min-height: 452px; display: flex; flex-direction: column; }
+#top-apps .more-link { margin-top: auto; padding-top: 6px; align-self: flex-start; }
 .more-link { display: inline-block; margin-top: 6px; font-size: 14px; font-weight: 600; text-underline-offset: 3px; }
 
 /* bars: 7 or 30 days, stacked by category */
 .bars-card #bars { flex: 1; display: flex; flex-direction: column; gap: 8px; }
-.bar-plot { position: relative; flex: 1; min-height: 200px; display: flex; align-items: flex-end; gap: 10px; border-bottom: 1px solid var(--line); }
-.bar-plot.many { gap: 3px; }
-.bar-col { flex: 1 1 0; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end;
-  border: 0; background: none; padding: 0; cursor: pointer; }
-.bar-col .stack { width: 100%; display: flex; flex-direction: column-reverse; border-radius: 8px 8px 2px 2px; overflow: hidden;
-  transition: opacity 0.15s; }
-.bar-col .stack span { display: block; flex: none; }
-.bar-plot.many .bar-col .stack { border-radius: 3px 3px 1px 1px; }
-.bar-col .stack.faded { opacity: 0.45; }
-.bar-col .stack.partial { outline: 1.5px dashed var(--muted); outline-offset: 1px; }
-.bar-col .stack.none { height: 0 !important; border-top: 2px dashed var(--empty); border-radius: 0; }
-.bar-col:hover .stack:not(.none) { filter: brightness(0.92); opacity: 1; }
 #bars-hint b { color: var(--ink); }
 
 @media (max-width: 560px) {
@@ -97,6 +103,12 @@
   .app-row .bar-track { grid-column: 1 / -1; grid-row: 2; }
   .bar-plot, .bar-labels:not(.week-labels) { gap: 4px; }
   .bar-plot { min-height: 150px; }
+  #top-apps { min-height: 0; }
+  .cat-week { grid-template-columns: minmax(0, 1fr) 48px 54px 44px; gap: 8px; }
+  .cat-week-name { font-size: 13px; }
+  .cat-week.head { font-size: 12px; }
+  /* 8 days are narrow: let "7h 50m" wrap onto two lines */
+  #bars .bar-labels .time { white-space: normal; text-align: center; line-height: 1.2; }
   .lane, .hours, .avg-day { grid-template-columns: 52px minmax(0, 1fr); gap: 8px; }
   .hour-bars { gap: 1px; }
 }

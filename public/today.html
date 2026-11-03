@@ -55,6 +55,25 @@
     </section>
 
     <div class="two-col">
+      <!-- the day added up, or for 7 or 30 days the average day added up -->
+      <section class="card" id="run-card">
+        <div class="card-head">
+          <h2 id="run-title">So far today</h2>
+          <span class="hint" id="run-hint"></span>
+        </div>
+        <div id="run"></div>
+      </section>
+
+      <section class="card bars-card">
+        <div class="card-head">
+          <h2 id="bars-title">Last 8 days</h2>
+          <span class="hint" id="bars-hint"></span>
+        </div>
+        <div id="bars"></div>
+      </section>
+    </div>
+
+    <div class="two-col">
       <section class="card">
         <div class="card-head">
           <h2 id="apps-title">Where the time went</h2>
@@ -65,28 +84,31 @@
 
       <section class="card bars-card">
         <div class="card-head">
-          <h2 id="bars-title">Last 7 days</h2>
-          <span class="hint" id="bars-hint"></span>
+          <h2>Week by week</h2>
+          <div class="head-right">
+            <span class="hint" id="weeks-avg"></span>
+            <div class="seg small" id="weeks-switch" role="group" aria-label="Show"></div>
+          </div>
         </div>
-        <div id="bars"></div>
+        <div id="weeks"></div>
       </section>
     </div>
 
     <div class="two-col">
-      <section class="card bars-card">
-        <div class="card-head">
-          <h2>Week by week</h2>
-          <span class="hint" id="weeks-hint"></span>
-        </div>
-        <div id="weeks"></div>
-      </section>
-
       <section class="card">
         <div class="card-head">
           <h2>Hours of the week</h2>
           <span class="hint" id="hours-hint"></span>
         </div>
         <div id="hours-heatmap"></div>
+      </section>
+
+      <section class="card bars-card">
+        <div class="card-head">
+          <h2>Your weekdays</h2>
+          <span class="hint" id="weekdays-hint"></span>
+        </div>
+        <div id="weekdays" class="weekdays"></div>
       </section>
     </div>
   </div>

@@ -9,9 +9,9 @@
 //
 //   The view of one app or one category, opened by clicking an app or a
 //   category's heading: its numbers for the range, a line through its last
-//   6 weeks (with each week's lightest to heaviest day), its share of all
-//   your time week by week, and when during the week you use it. A
-//   category's view also lists its apps, each with its own trend.
+//   6 weeks (with each week's lightest to heaviest day), its average for
+//   each weekday, today so far against the same weekday, and when during
+//   the week you use it. A category's view also lists its apps.
 //
 // Loads /api/usage from the local server (server.mjs). Shared helpers and
 // charts are in common.js.
@@ -23,7 +23,8 @@
 import { setupRefresh, showLastArchived } from "./refresh.js";
 import {
   DAY, loadUsage, esc, fmt, fmtDate, todayIdx, weekdayOf, hideTip, UNTRACKED_KEY, categoryKeys, categoryColor, categoryName,
-  weekLineHtml, weekdayHourHtml, addToHours,
+  weekLineHtml, weekdayHourHtml, addToHours, localNow, WEEKDAYS, fmtClock, STEPS, stepTotals, runningTotal, runningTotalHtml,
+  weekdayBarsHtml,
 } from "./common.js";
 
 const SESSION_GAP = 60;       // uses of the same app less than this apart count as one open
@@ -188,7 +189,16 @@ function compute() {
   }
   rows.sort((a, b) => b.perDay - a.perDay);
   const totalPerDay = rows.reduce((sum, r) => sum + r.perDay, 0);
-  return { devs, start, end, days, prevDays, rows, totalPerDay };
+  // Each category's time per day in the period before (every app counts,
+  // even ones not used in this period), for the headings' change
+  const catBefore = new Map();
+  if (prevDays.length) {
+    for (const s of stats.values()) {
+      const key = catOf(s.app);
+      catBefore.set(key, (catBefore.get(key) ?? 0) + sumDays(s, prevStart, prevEnd) / prevDays.length);
+    }
+  }
+  return { devs, start, end, days, prevDays, rows, totalPerDay, catBefore };
 }
 
 // ---------- the list ----------
@@ -253,6 +263,14 @@ function changeCell(r) {
 
 const opensText = (perDay) => (perDay >= 10 ? Math.round(perDay) : perDay.toFixed(1).replace(/\.0$/, "")) + "";
 
+// A category's change from the period before, worked out like an app's
+function categoryChange(c, key, perDay) {
+  if (state.range === "all") return null;
+  if (c.prevDays.length < MIN_COMPARE_DAYS) return { kind: "unknown" };
+  const before = c.catBefore.get(key) ?? 0;
+  return before < NEW_BELOW_SECS ? { kind: "new", before } : { kind: "pct", before, pct: Math.round(((perDay - before) / before) * 100) };
+}
+
 // The list, grouped by category: a heading for each category (its color,
 // name, how many apps and its time per day), then its apps. Clicking an app
 // or a heading opens its view.
@@ -295,7 +313,7 @@ function renderList(c) {
       '<button class="app-who" aria-label="' + esc(appName(r.app) + ", " + fmt(r.perDay) + " a day. Open") + '">' +
       "<b>" + esc(appName(r.app)) + "</b>" + (isGap ? "<span>Screen on, no app recorded</span>" : "") + "</button>" +
       '<span class="device">' + esc(where) + "</span>" +
-      sparkline(r, color) +
+      sparkline(r, solidColor(catOf(r.app))) +
       '<span class="num per-day">' + fmt(r.perDay) + "</span>" +
       '<span class="num opens" data-tip="' + esc(isGap ? "Not counted for untracked time" : r.opens + " opens in all") + '">' +
       (isGap ? "–" : opensText(r.opensPerDay)) + "</span>" +
@@ -316,7 +334,8 @@ function renderList(c) {
         '<span class="stripe" style="background:' + color + '"></span>' +
         '<span><b class="group-name">' + esc(catName(g.key)) + '</b><span class="open-mark" aria-hidden="true"> ›</span>' +
         (g.key === UNTRACKED_KEY ? "" : '<span class="muted"> · ' + plural(appCount, "app") + "</span>") + "</span>" +
-        '<span class="group-time">' + fmt(g.perDay) + "</span></button>" +
+        '<span class="group-time">' + fmt(g.perDay) + "</span>" +
+        '<span class="group-change">' + changeCell({ perDay: g.perDay, change: categoryChange(c, g.key, g.perDay) }) + "</span></button>" +
         '<div class="group-rows">' + shown.map((r) => line(r, color)).join("") +
         (more ? '<button class="group-more" data-more>and ' + more + " more</button>" : "") + "</div></div>";
     }).join("");
@@ -367,7 +386,9 @@ function weeklyTrend(totals) {
   const weeks = [];
   for (let w = 0; w < WEEKS_SHOWN; w++) {
     const from = first + w * 7;
-    const days = daysWithData(from, Math.min(from + 6, todayIdx - 1), devs);
+    let days = daysWithData(from, Math.min(from + 6, todayIdx - 1), devs);
+    // On a Monday no full day of this week has passed, so show today so far
+    if (!days.length && from === thisMonday) days = daysWithData(todayIdx, todayIdx, devs);
     const vals = days.map((d) => totals.mine.get(d) ?? 0);
     const sum = vals.reduce((a, b) => a + b, 0);
     const allSum = days.reduce((a, d) => a + (totals.all.get(d) ?? 0), 0);
@@ -389,28 +410,60 @@ function weeklyTrend(totals) {
   };
 }
 
-function trendCharts(trend, totals) {
+function weekCard(trend, totals) {
   const range = (w) => (w.current ? short(w.from) + " to today" : short(w.from) + " to " + short(w.from + 6));
   const dayText = (d) => fmtDate(d, { weekday: "short" }) + " " + fmt(totals.mine.get(d) ?? 0);
-  const label = (w) => (w.current ? "This week" : short(w.from));
-  const timeLine = weekLineHtml(trend.weeks.map((w) => ({
-    label: label(w), value: w.avg, current: w.current,
+  const line = weekLineHtml(trend.weeks.map((w) => ({
+    label: w.current ? "This week" : short(w.from), value: w.avg, current: w.current,
     low: w.lowDay === null ? null : totals.mine.get(w.lowDay) ?? 0,
     high: w.highDay === null ? null : totals.mine.get(w.highDay) ?? 0,
     tip: [range(w) + (w.current ? " (so far)" : "") + ": " + (w.avg === null ? "no data" : fmt(w.avg) + " a day")]
       .concat(w.avg === null ? [] : ["Lightest: " + dayText(w.lowDay), "Heaviest: " + dayText(w.highDay)]).join("\n"),
   })), { format: fmt, average: trend.average, floor: 60 });
-  const shareLine = weekLineHtml(trend.weeks.map((w) => ({
-    label: label(w), value: w.share, current: w.current,
-    tip: range(w) + (w.current ? " (so far)" : "") + ": " + (w.share === null ? "no data" : pctText(w.share) + " of your screen time"),
-  })), { format: pctText, average: trend.averageShare, floor: 1 });
-  return '<div class="detail-grid">' +
-    '<section class="card"><div class="card-head"><h2>Week by week</h2><span class="hint"><span class="avg-key"></span>6-week average ' +
-    (trend.average === null ? "–" : "<b>" + fmt(trend.average) + "</b>") + '</span></div>' + timeLine +
-    '<p class="hint">A day, on average. The gray bar runs from the week\'s lightest day to its heaviest.</p></section>' +
-    '<section class="card"><div class="card-head"><h2>Share of your time</h2><span class="hint"><span class="avg-key"></span>6-week average ' +
-    (trend.averageShare === null ? "–" : "<b>" + pctText(trend.averageShare) + "</b>") + '</span></div>' + shareLine +
-    '<p class="hint">Of all your screen time on these devices, week by week.</p></section></div>';
+  return '<section class="card"><div class="card-head"><h2>Week by week</h2><span class="hint"><span class="avg-key"></span>6-week average ' +
+    (trend.average === null ? "–" : "<b>" + fmt(trend.average) + "</b>") + '</span></div>' + line +
+    '<p class="hint">A day, on average. The gray bar runs from the week\'s lightest day to its heaviest.</p></section>';
+}
+
+// Its average for each weekday, over the days with data in the last 6 weeks
+// (today left out while it's going); today's weekday is outlined
+function weekdayCard(trend, totals, color, name) {
+  const byWeekday = Array.from({ length: 7 }, () => []);
+  for (const d of daysWithData(trend.first, todayIdx - 1, selectedDevices())) byWeekday[weekdayOf(d)].push(totals.mine.get(d) ?? 0);
+  const days = byWeekday.map((vals) => {
+    if (!vals.length) return null;
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    return { total: avg, parts: [[color, avg, name]] };
+  });
+  return '<section class="card bars-card"><div class="card-head"><h2>By weekday</h2><span class="hint">A day, last 6 weeks</span></div>' +
+    '<div class="weekdays">' + weekdayBarsHtml(days, { chosen: weekdayOf(todayIdx), hint: "last 6 weeks" }) + "</div></section>";
+}
+
+// Today so far, added up through the day, against the same weekday last week
+// and the average for that weekday over the 6 weeks before
+function runCard(matches) {
+  const devs = selectedDevices();
+  const devSet = new Set(devs);
+  const wanted = [todayIdx];
+  for (let k = 1; k <= 6; k++) wanted.push(todayIdx - 7 * k);
+  const spans = new Map(wanted.map((d) => [d, []]));
+  for (const [dev, app, start, end] of DATA.segs) {
+    if (devSet.has(dev) && spans.has(dayOf(start)) && matches(app)) spans.get(dayOf(start)).push([start, end]);
+  }
+  if (matches(UNTRACKED)) {
+    for (const [dev, start, end] of DATA.gaps) if (devSet.has(dev) && spans.has(dayOf(start))) spans.get(dayOf(start)).push([start, end]);
+  }
+  const line = (d) => runningTotal(stepTotals(spans.get(d), d));
+  const hasData = (d) => daysWithData(d, d, devs).length > 0;
+  const before = wanted.slice(1).filter(hasData).map(line);
+  const avg = before.length ? before[0].map((_, i) => before.reduce((a, l) => a + l[i], 0) / before.length) : null;
+  const w = weekdayOf(todayIdx);
+  const nowStep = ((localNow() % DAY) / DAY) * STEPS;
+  return '<section class="card"><div class="card-head"><h2>So far today</h2><span class="hint">By ' + esc(fmtClock(localNow())) + "</span></div>" +
+    runningTotalHtml(
+      { main: line(todayIdx), last: hasData(todayIdx - 7) ? line(todayIdx - 7) : null, avg },
+      { main: "Today", last: "Last " + WEEKDAYS[w], avg: "Average " + WEEKDAYS[w] + " (" + before.length + (before.length === 1 ? " week" : " weeks") + ")" },
+      nowStep) + "</section>";
 }
 
 // When during the week: the average time in each hour, over the 6 weeks
@@ -479,8 +532,10 @@ function renderAppView(c, app) {
   const matches = (a) => a === app;
   const totals = dailyTotals(matches);
   const trend = weeklyTrend(totals);
-  document.getElementById("detail-view").innerHTML = statCards(stats) + trendCharts(trend, totals) +
-    hoursCard(trend, matches, solidColor(key)) +
+  const color = solidColor(key);
+  document.getElementById("detail-view").innerHTML = statCards(stats) +
+    '<div class="detail-grid">' + weekCard(trend, totals) + weekdayCard(trend, totals, color, appName(app)) + "</div>" +
+    '<div class="detail-grid">' + runCard(matches) + hoursCard(trend, matches, color) + "</div>" +
     (isGap ? "" : '<a class="detail-link" href="/organize#search=' + encodeURIComponent(appName(app)) + '">Rename it or change its category</a>');
 }
 
@@ -528,8 +583,9 @@ function renderCategoryView(c, key) {
         '<span class="num">' + changeCell(r) + "</span></button>";
     }).join("") + "</div></section>" : "";
 
-  document.getElementById("detail-view").innerHTML = statCards(stats) + appList + trendCharts(trend, totals) +
-    hoursCard(trend, matches, color) +
+  document.getElementById("detail-view").innerHTML = statCards(stats) + appList +
+    '<div class="detail-grid">' + weekCard(trend, totals) + weekdayCard(trend, totals, color, catName(key)) + "</div>" +
+    '<div class="detail-grid">' + runCard(matches) + hoursCard(trend, matches, color) + "</div>" +
     (key === UNTRACKED_KEY ? "" : '<a class="detail-link" href="/organize">Edit categories</a>');
 }
 

@@ -185,6 +185,92 @@ export function weekdayHourHtml(sums, counts, { color = null, chosen = -1 } = {}
     '<div class="cal-legend"><span>Average per hour</span><span>less ' + keys + " more</span></div>";
 }
 
+// ---------- running total through a day ----------
+// A day in 15-minute steps; a running total is STEPS + 1 values, from
+// midnight (0) to the end of the day.
+
+export const STEPS = 96;
+const STEP_SECS = DAY / STEPS;
+
+// Seconds in each 15-minute step of one day. spans: [start, end] pairs in
+// local seconds (any that fall outside the day are clipped).
+export function stepTotals(spans, day) {
+  const bins = new Array(STEPS).fill(0);
+  const dayStart = day * DAY, dayEnd = dayStart + DAY;
+  for (const [s, e] of spans) {
+    for (let t = Math.max(s, dayStart), end = Math.min(e, dayEnd); t < end;) {
+      const i = Math.floor((t - dayStart) / STEP_SECS);
+      const upTo = Math.min(end, dayStart + (i + 1) * STEP_SECS);
+      bins[i] += upTo - t;
+      t = upTo;
+    }
+  }
+  return bins;
+}
+
+export function runningTotal(bins) {
+  const out = [0];
+  for (const b of bins) out.push(out[out.length - 1] + b);
+  return out;
+}
+
+// Lines through the day: the day you're looking at (solid, stopping at
+// nowStep if it's still going), the same weekday a week before (gray) and
+// the average for that weekday (dashed). lines: { main, last, avg } running
+// totals (last and avg may be null); names: their labels for the key.
+// nowStep: where "now" is, in steps (with a fraction), or null for a whole day.
+// While the day is going, the main line runs to now with everything so far,
+// and the others are read at that same moment.
+export function runningTotalHtml(lines, names, nowStep = null) {
+  const at = (arr) => {
+    if (nowStep === null || arr === lines.main) return arr[STEPS];
+    const f = Math.min(STEPS - 1, Math.floor(nowStep));
+    return arr[f] + (arr[f + 1] - arr[f]) * (nowStep - f);
+  };
+  const top = Math.max(60, ...[lines.main, lines.last, lines.avg].filter(Boolean).map((a) => a[STEPS]), lines.main[STEPS]) * 1.08;
+  const x = (i) => ((i / STEPS) * 1000).toFixed(1);
+  const y = (v) => (300 - (v / top) * 300).toFixed(1);
+  const path = (arr, upTo = STEPS) => arr.slice(0, Math.floor(upTo) + 1).map((v, i) => (i ? "L" : "M") + x(i) + " " + y(v)).join(" ") +
+    (upTo % 1 ? " L" + x(upTo) + " " + y(arr[STEPS]) : "");
+  const pct = (v) => ((v / top) * 100).toFixed(2);
+  const key = (cls, label, value) => '<span class="run-key ' + cls + '"><span class="run-swatch"></span>' + esc(label) + " <b>" + fmt(value) + "</b></span>";
+  return '<div class="run-plot">' +
+    '<svg class="run-lines" viewBox="0 0 1000 300" preserveAspectRatio="none" aria-hidden="true">' +
+    (lines.avg ? '<path class="avg" d="' + path(lines.avg) + '"></path>' : "") +
+    (lines.last ? '<path class="last" d="' + path(lines.last) + '"></path>' : "") +
+    '<path class="main" d="' + path(lines.main, nowStep ?? STEPS) + '"></path></svg>' +
+    (nowStep === null ? "" : '<span class="run-now" style="left:' + ((nowStep / STEPS) * 100).toFixed(2) + '%"></span>' +
+      '<span class="run-dot" style="left:' + ((nowStep / STEPS) * 100).toFixed(2) + "%;bottom:" + pct(lines.main[STEPS]) + '%"></span>') +
+    "</div>" +
+    '<div class="run-axis"><span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>12a</span></div>' +
+    '<div class="run-keys">' + key("main", names.main, at(lines.main)) +
+    (lines.last ? key("last", names.last, at(lines.last)) : "") +
+    (lines.avg ? key("avg", names.avg, at(lines.avg)) : "") + "</div>";
+}
+
+// ---------- the average day for each weekday ----------
+// days: [{ total, parts: [[color, secs, name], ...] }] indexed by weekday
+// (0 = Sunday), each the average for that weekday, or null with no data.
+// Drawn Monday to Sunday; chosen (a weekday number) is outlined.
+export function weekdayBarsHtml(days, { chosen = -1, hint = "" } = {}) {
+  const top = Math.max(60, ...days.filter(Boolean).map((d) => d.total)) * 1.08;
+  const cols = MON_FIRST.map((w) => {
+    const d = days[w];
+    const tip = WEEKDAYS[w] + "s" + (hint ? ", " + hint : "") + ": " + (d ? fmt(d.total) + " a day" : "no data") +
+      (d ? d.parts.filter((p) => p[1] >= 60).sort((a, b) => b[1] - a[1]).slice(0, 5).map((p) => "\n" + p[2] + " " + fmt(p[1])).join("") : "");
+    const stack = d && d.total > 0
+      ? '<span class="stack" style="height:' + ((d.total / top) * 100).toFixed(1) + '%">' +
+        d.parts.filter((p) => p[1] > 0).map((p) => '<span style="height:' + ((p[1] / d.total) * 100).toFixed(2) + "%;background:" + p[0] + '"></span>').join("") +
+        "</span>"
+      : '<span class="stack none"></span>';
+    return '<div class="bar-col static' + (w === chosen ? " chosen" : "") + '" tabindex="0" data-tip="' + esc(tip) + '">' + stack + "</div>";
+  });
+  const labels = MON_FIRST.map((w) =>
+    '<div><span class="label' + (w === chosen ? " on" : "") + '">' + WEEKDAYS[w].slice(0, 3) + "</span>" +
+    '<span class="time">' + (days[w] ? fmt(days[w].total) : "–") + "</span></div>");
+  return '<div class="bar-plot weekday-plot">' + cols.join("") + "</div>" + '<div class="bar-labels">' + labels.join("") + "</div>";
+}
+
 // Adds a stretch of time to sums[weekday][hour], split across the hours it covers
 export function addToHours(sums, weekday, start, end) {
   for (let t = start; t < end;) {

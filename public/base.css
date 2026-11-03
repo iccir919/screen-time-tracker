@@ -88,6 +88,7 @@ button, input, select { font: inherit; }
 /* cards */
 .card { background: var(--surface); border: 1px solid var(--card-line); border-radius: 20px; padding: 24px;
   display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.card[hidden] { display: none; }
 .card-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 12px; }
 .card h2 { font-size: 18px; font-weight: 700; }
 .card-link { font-size: 14px; font-weight: 600; text-underline-offset: 3px; }
@@ -114,6 +115,42 @@ button, input, select { font: inherit; }
 /* dashed average line and its key */
 .avg-line { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--ink); z-index: 1; pointer-events: none; }
 .avg-key { display: inline-block; width: 18px; border-top: 2px dashed var(--ink); vertical-align: middle; margin-right: 6px; }
+
+/* bar charts: a column per day, stacked by category */
+.bar-plot { position: relative; flex: 1; min-height: 200px; display: flex; align-items: flex-end; gap: 10px; border-bottom: 1px solid var(--line); }
+.bar-plot.many { gap: 3px; }
+.bar-col { flex: 1 1 0; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end;
+  border: 0; background: none; padding: 0; cursor: pointer; }
+.bar-col .stack { width: 100%; display: flex; flex-direction: column-reverse; border-radius: 8px 8px 2px 2px; overflow: hidden;
+  transition: opacity 0.15s; }
+.bar-col .stack span { display: block; flex: none; }
+.bar-plot.many .bar-col .stack { border-radius: 3px 3px 1px 1px; }
+.bar-col .stack.faded { opacity: 0.45; }
+.bar-col .stack.partial { outline: 1.5px dashed var(--muted); outline-offset: 1px; }
+.bar-col .stack.none { height: 0 !important; border-top: 2px dashed var(--empty); border-radius: 0; }
+.bar-col:hover .stack:not(.none) { filter: brightness(0.92); opacity: 1; }
+.bar-col.static { cursor: default; }
+.bar-col.chosen .stack:not(.none) { outline: 2px solid var(--ink); outline-offset: 2px; }
+.weekday-plot { min-height: 180px; }
+
+/* running total through a day (common.js): the day solid, the same weekday
+   a week before in gray, the weekday's average dashed */
+.run-plot { position: relative; height: 200px; margin-top: 8px; border-bottom: 1px solid var(--line); }
+.run-lines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.run-lines path { fill: none; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.run-lines .main { stroke: var(--ink); stroke-width: 2.6; }
+.run-lines .last { stroke: #A1A1A8; stroke-width: 2; }
+.run-lines .avg { stroke: var(--muted); stroke-width: 1.6; stroke-dasharray: 5 4; }
+.run-now { position: absolute; top: 0; bottom: 0; border-left: 1.5px dashed var(--line); }
+.run-dot { position: absolute; z-index: 1; width: 10px; height: 10px; margin: 0 0 -5px -5px; border-radius: 50%; background: var(--ink); }
+.run-axis { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.run-keys { display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px 18px; font-size: 13px; color: var(--muted); margin-top: 10px;
+  min-height: 44px; /* room for two lines, so the card keeps one height */ }
+.run-key { display: inline-flex; align-items: center; gap: 7px; }
+.run-key b { color: var(--ink); }
+.run-swatch { display: inline-block; width: 18px; border-top: 2.6px solid var(--ink); }
+.run-key.last .run-swatch { border-top: 2px solid #A1A1A8; }
+.run-key.avg .run-swatch { border-top: 2px dashed var(--muted); }
 
 /* labels under a chart's columns */
 .bar-labels { display: flex; gap: 10px; }
@@ -168,4 +205,6 @@ button, input, select { font: inherit; }
   .hour-row { gap: 2px; }
   .hour-cell { height: 20px; border-radius: 2px; }
   .week-plot { min-height: 160px; }
+  .run-plot { height: 160px; }
+  .weekday-plot { min-height: 150px; }
 }
