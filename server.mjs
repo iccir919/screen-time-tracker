@@ -51,7 +51,7 @@ const CONTENT_TYPES = {
 };
 
 // Friendly page paths
-const PAGES = { "/": "today.html", "/apps": "apps.html", "/organize": "organize.html" };
+const PAGES = { "/": "today.html", "/trends": "trends.html", "/apps": "apps.html", "/organize": "organize.html" };
 
 class HttpError extends Error {
   constructor(status, message) {

@@ -1,0 +1,168 @@
+/* public/dashboard.css: styles for the Today and Trends pages (shared pieces and colors are in base.css) */
+
+/* the date or range, with arrows, and the device switch */
+.range-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-top: 4px; }
+.range-bar .seg[hidden] { display: none; }
+.range-switches { display: flex; flex-wrap: wrap; gap: 8px; }
+.day-nav { display: flex; align-items: center; gap: 10px; }
+.day-label { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; color: var(--ink); padding: 0 4px; }
+.date-short { display: none; }
+.round-button { width: 44px; height: 44px; flex: none; border-radius: 50%; border: 1px solid var(--line); background: var(--surface);
+  color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.round-button svg { width: 20px; height: 20px; }
+.round-button:hover:not(:disabled) { background: var(--accent-tint); }
+.round-button:disabled { background: transparent; color: #C2C2C7; cursor: default; }
+
+/* the three cards: the day, the 7-day average, the 30-day average.
+   The chosen one has a dark outline. */
+.period-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.period-card { text-align: left; cursor: pointer; border: 1px solid var(--card-line); border-radius: 20px; padding: 20px 22px;
+  min-height: 170px; display: flex; flex-direction: column; justify-content: space-between; gap: 12px;
+  background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1px transparent; }
+.period-card:hover { border-color: #C8C8CD; }
+.period-card.chosen { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); cursor: default; }
+a.period-card { text-decoration: none; }
+div.period-card { cursor: default; }
+div.period-card:not(.chosen):hover { border-color: var(--card-line); }
+.period-card .label { font-size: 15px; font-weight: 600; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+.period-card.chosen .label { color: var(--ink); }
+.period-card .label small { font-size: 13px; font-weight: 500; color: var(--muted); }
+.period-card .value { font-size: clamp(40px, 7vw, 52px); font-weight: 800; letter-spacing: -0.04em; line-height: 1; }
+.period-card .value.none { font-size: 28px; color: var(--muted); }
+/* the category mix under the number */
+.share { display: flex; gap: 2px; height: 8px; border-radius: 999px; overflow: hidden; background: var(--track); }
+.share span { display: block; min-width: 2px; }
+.period-card .split { font-size: 13px; color: var(--muted); white-space: pre-wrap; min-height: 1.5em; }
+
+/* the category colors, under the cards */
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); margin-top: -4px; }
+.legend:empty { display: none; }
+.legend-item { display: inline-flex; align-items: center; gap: 8px; font: inherit; font-size: 14px; font-weight: 600; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line); padding: 7px 14px; border-radius: 999px; cursor: pointer; }
+.legend-item:hover { border-color: var(--muted); }
+.legend-item.on { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+/* on Trends: spotlighted categories are outlined, the rest fade */
+.legend-item.dim { color: var(--muted); background: var(--lane); border-color: transparent; }
+.legend-item.dim .swatch { opacity: 0.35; }
+.legend-item.all { color: var(--muted); border-style: dashed; }
+.legend-hint { margin-left: auto; color: var(--muted); font-style: italic; }
+.legend-hint + .legend-link { margin-left: 12px; }
+.legend-link { margin-left: auto; color: var(--muted); font-weight: 600; text-underline-offset: 3px; }
+
+/* what's followed: under the legend, while something is picked */
+.focus-bar { position: sticky; top: 8px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+  padding: 10px 12px 10px 16px; border-radius: 14px; background: var(--surface); border: 1.5px solid var(--ink);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08); font-size: 15px; }
+.focus-bar[hidden] { display: none; }
+.focus-bar b { font-weight: 700; }
+.focus-bar a { font-size: 14px; font-weight: 600; text-underline-offset: 3px; }
+.focus-clear { margin-left: auto; font: inherit; font-size: 14px; font-weight: 600; color: var(--ink); background: var(--lane);
+  border: 0; border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+.focus-clear:hover { background: var(--track); }
+
+.head-right { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 12px; }
+.head-right .hint b { color: var(--ink); }
+/* patterns: by weekday or by week, stacked bars like Day by day */
+.pattern-box { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.pattern-key { margin: 0 0 4px; }
+/* weekdays and weeks: one row each, a bar split by category, the time at the end */
+.prows { display: flex; flex-direction: column; }
+.prow { display: grid; grid-template-columns: 72px minmax(0, 1fr) 80px; gap: 14px; align-items: center; padding: 7px 0; }
+.prow-name { font-size: 14px; font-weight: 600; color: var(--ink-2); }
+.prow-track { position: relative; height: 24px; }
+.prow-bar { display: flex; height: 100%; border-radius: 7px; overflow: hidden; }
+.prow-bar.faded { opacity: 0.5; }
+.prow-bar > * { display: block; height: 100%; }
+.prow-bar a:hover, .hour-bar .stack a:hover { filter: brightness(0.85); }
+.prow-avg { position: absolute; top: -5px; bottom: -5px; border-left: 2px dashed var(--ink); pointer-events: none; }
+.prow-time { text-align: right; font-size: 14px; font-weight: 600; line-height: 1.15; }
+.prow-time small { display: block; font-size: 11px; font-weight: 400; color: var(--muted); }
+.hour-bar .stack a { display: block; flex: none; }
+.pattern-key b { color: var(--ink); }
+
+.two-col { display: flex; flex-wrap: wrap; gap: 20px; }
+.two-col > .card { flex: 1 1 420px; }
+
+/* timeline: the day */
+.lane { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 14px; align-items: center; margin-bottom: 10px; }
+.lane-name { font-size: 14px; font-weight: 600; color: var(--ink-2); }
+.lane-track { position: relative; height: 34px; background: var(--lane); border-radius: 10px; overflow: hidden; }
+.lane-track.no-data { background: transparent; border: 1.5px dashed var(--empty); display: flex; align-items: center;
+  justify-content: center; font-size: 13px; color: var(--muted); }
+.block { position: absolute; top: 5px; bottom: 5px; min-width: 2px; border-radius: 4px; }
+.block.gap { background: var(--untracked-stripes); }
+.block:hover { filter: brightness(0.88); }
+.block.dim { opacity: 0.18; }
+.hours { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 14px; }
+.hours div { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+
+/* timeline: an average day, minutes per hour, stacked by category; it
+   fills the card's width, with no name column like the day's lanes */
+.hours.bare { grid-template-columns: minmax(0, 1fr); margin-top: 8px; }
+.hour-bars.tall { height: 280px; }
+.hour-bars { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; align-items: end; height: 140px;
+  border-bottom: 1px solid var(--line); }
+.hour-bar { display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+.hour-bar .stack { display: flex; flex-direction: column-reverse; border-radius: 3px 3px 0 0; overflow: hidden; }
+.hour-bar .stack span { display: block; flex: none; }
+.hour-bar:hover .stack { filter: brightness(0.9); }
+
+/* where the time went: each row is a category or app, its time, and when
+   it happens (24 hours, and Mon to Sun on Trends). Clicking follows it. */
+.tw { display: flex; flex-direction: column; }
+.tw-row { display: grid; grid-template-columns: minmax(200px, 1.4fr) 64px minmax(0, 3fr); gap: 16px; align-items: center;
+  width: calc(100% + 16px); margin: 0 -8px; padding: 3px 8px; font: inherit; color: inherit; text-align: left;
+  background: none; border: 0; border-radius: 10px; }
+.tw.with-days .tw-row { grid-template-columns: minmax(140px, 1.1fr) 64px minmax(0, 3fr) minmax(0, 1fr); }
+button.tw-row { cursor: pointer; }
+button.tw-row:hover { box-shadow: inset 0 0 0 1px var(--line); }
+.tw-row.on { box-shadow: inset 0 0 0 1.5px var(--ink); }
+.tw-row.head { padding-top: 0; padding-bottom: 2px; font-size: 12px; color: var(--muted); }
+.tw-name { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.tw-time { font-weight: 600; text-align: right; }
+.tw-row.head .tw-time { font-weight: 400; }
+.tw-hours, .tw-days { display: grid; gap: 2px; }
+.tw-hours { grid-template-columns: repeat(24, minmax(0, 1fr)); }
+.tw-days { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.tw-hours > span, .tw-row:not(.head) .tw-days > span { height: 18px; border-radius: 3px; }
+.tw-row.head .tw-days > span { text-align: center; }
+.tw-axis { display: flex; justify-content: space-between; }
+.app-name { display: flex; flex-direction: column; min-width: 0; }
+.app-name b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-name span { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* categories by day: one row per category, one cell per day */
+
+#top-apps { display: flex; flex-direction: column; }
+#top-apps .more-link { align-self: flex-start; }
+.more-link { display: inline-block; margin-top: 6px; font-size: 14px; font-weight: 600; text-underline-offset: 3px; }
+
+/* bars: 7 or 30 days, stacked by category */
+.bars-card #bars { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+#bars-hint b { color: var(--ink); }
+
+@media (max-width: 560px) {
+  .day-label { font-size: 18px; }
+  .date-long { display: none; }
+  .date-short { display: inline; }
+  .period-cards { grid-template-columns: 1fr; gap: 10px; }
+  .period-card { min-height: 0; padding: 16px 18px; }
+  .legend { margin-top: -4px; gap: 6px 14px; }
+  /* the name and time on one line, when it happens under them */
+  .tw-row, .tw.with-days .tw-row { grid-template-columns: minmax(0, 3fr) minmax(0, 1fr); gap: 4px 10px; }
+  .tw-row.head { display: none; }
+  .tw-hours { grid-column: 1; }
+  .tw-hours > span, .tw-row:not(.head) .tw-days > span { height: 16px; border-radius: 2px; }
+  .tw-hours { gap: 1px; }
+  .bar-plot, .bar-labels:not(.week-labels) { gap: 4px; }
+  .bar-plot { min-height: 150px; }
+  .legend-item { font-size: 13px; padding: 5px 11px; }
+  /* 8 days are narrow: let "7h 50m" wrap onto two lines */
+  #bars .bar-labels .time { white-space: normal; text-align: center; line-height: 1.2; }
+  .lane, .hours { grid-template-columns: 52px minmax(0, 1fr); gap: 8px; }
+  .hours.bare { grid-template-columns: minmax(0, 1fr); }
+  .hour-bars { gap: 1px; }
+  .hour-bars.tall { height: 200px; }
+  .focus-bar { font-size: 14px; gap: 6px 12px; }
+  .prow { grid-template-columns: 52px minmax(0, 1fr) 64px; gap: 8px; }
+  .prow-name, .prow-time { font-size: 13px; }
+}

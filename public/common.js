@@ -138,27 +138,11 @@ export function weekLineHtml(weeks, { format, average = null, floor = 0 } = {}) 
     '<div class="bar-labels week-labels">' + labels.join("") + "</div>";
 }
 
-// Shades come from your own values, so they show your lighter and heavier
-// hours whatever your usual amount is: each shade is about a fifth of the
-// values. With too few values, the fallback steps are used.
-export function quintileSteps(values, round, fallback) {
-  const sorted = values.filter((v) => v > 0).sort((a, b) => a - b);
-  if (sorted.length < 10) return fallback;
-  const at = (share) => sorted[Math.min(sorted.length - 1, Math.floor(share * sorted.length))];
-  const steps = [0.2, 0.4, 0.6, 0.8].map((share) => Math.max(round, Math.round(at(share) / round) * round));
-  for (let i = 1; i < steps.length; i++) if (steps[i] <= steps[i - 1]) steps[i] = steps[i - 1] + round;
-  return steps;
-}
-
-export function heatLevel(secs, steps) {
-  const step = steps.findIndex((limit) => secs < limit);
-  return step === -1 ? 5 : step + 1;
-}
-
-// A shade from 1 (least) to 5 (most): grays, or lighter and darker versions
-// of a category color
-const shade = (level, color) =>
-  color ? "color-mix(in srgb, " + color + " " + [0, 22, 42, 62, 82, 100][level] + "%, var(--surface))" : "var(--heat-" + level + ")";
+// One shading rule for every grid of hours or days: a cell's share of the
+// busiest cell (0 to 1), on a square-root curve so lighter amounts still
+// show. color: a category color, or gray without one.
+export const heatShade = (share, color = null) =>
+  "color-mix(in srgb, " + (color ?? "var(--heat-5)") + " " + Math.round(18 + Math.sqrt(Math.max(0, Math.min(1, share))) * 82) + "%, var(--surface))";
 
 // Weekday by hour: sums[weekday][hour] is the time in that hour over the
 // days counted, counts[weekday] how many of each weekday were counted. Shows
@@ -166,23 +150,22 @@ const shade = (level, color) =>
 // chosen: a weekday number to bold.
 export function weekdayHourHtml(sums, counts, { color = null, chosen = -1 } = {}) {
   const avg = sums.map((row, w) => row.map((s) => (counts[w] ? s / counts[w] : 0)));
-  const steps = quintileSteps(avg.flat(), 60, [5, 15, 30, 45].map((m) => m * 60));
+  const max = Math.max(60, ...avg.flat());
   const rows = MON_FIRST.map((w) => {
     const cells = avg[w].map((s, h) => {
       const text = WEEKDAYS[w] + "s, " + hourName(h) + ": " + (counts[w] ? fmt(s) + " on average" : "no data");
-      const bg = !counts[w] ? "" : s < 30 ? "background:var(--lane)" : "background:" + shade(heatLevel(s, steps), color);
+      const bg = !counts[w] ? "" : s < 30 ? "background:var(--lane)" : "background:" + heatShade(s / max, color);
       return '<span class="hour-cell' + (counts[w] ? " has" : "") + '" style="' + bg + '" data-tip="' + esc(text) + '"></span>';
     }).join("");
     return '<span class="hour-day' + (w === chosen ? " chosen" : "") + '">' + WEEKDAYS[w].slice(0, 3) + "</span>" +
       '<div class="hour-row">' + cells + "</div>";
   }).join("");
-  const keys = [1, 2, 3, 4, 5].map((n, i) =>
-    '<span class="cal-key" style="background:' + shade(n, color) + '" data-tip="' +
-    (i === 0 ? "Under " + fmt(steps[0]) : i === 4 ? fmt(steps[3]) + " or more" : fmt(steps[i - 1]) + " to " + fmt(steps[i])) +
-    '"></span>').join("");
+  // The key: about a twentieth, a fifth, two fifths, three fifths, all of the busiest hour
+  const keys = [0.05, 0.2, 0.4, 0.6, 1].map((share) =>
+    '<span class="cal-key" style="background:' + heatShade(share, color) + '" data-tip="About ' + fmt(share * max) + '"></span>').join("");
   return '<div class="hour-grid">' + rows +
     '<span></span><div class="hour-axis"><span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>12a</span></div></div>' +
-    '<div class="cal-legend"><span>Average per hour</span><span>less ' + keys + " more</span></div>";
+    '<div class="cal-legend"><span>Average per hour, against the busiest (' + fmt(max) + ')</span><span>less ' + keys + " more</span></div>";
 }
 
 // ---------- running total through a day ----------
@@ -251,6 +234,7 @@ export function runningTotalHtml(lines, names, nowStep = null) {
 // ---------- the average day for each weekday ----------
 // days: [{ total, parts: [[color, secs, name], ...] }] indexed by weekday
 // (0 = Sunday), each the average for that weekday, or null with no data.
+// label, if given, is the time shown under the bar instead of the total.
 // Drawn Monday to Sunday; chosen (a weekday number) is outlined.
 export function weekdayBarsHtml(days, { chosen = -1, hint = "" } = {}) {
   const top = Math.max(60, ...days.filter(Boolean).map((d) => d.total)) * 1.08;
@@ -267,7 +251,7 @@ export function weekdayBarsHtml(days, { chosen = -1, hint = "" } = {}) {
   });
   const labels = MON_FIRST.map((w) =>
     '<div><span class="label' + (w === chosen ? " on" : "") + '">' + WEEKDAYS[w].slice(0, 3) + "</span>" +
-    '<span class="time">' + (days[w] ? fmt(days[w].total) : "–") + "</span></div>");
+    '<span class="time">' + (days[w] ? fmt(days[w].label ?? days[w].total) : "–") + "</span></div>");
   return '<div class="bar-plot weekday-plot">' + cols.join("") + "</div>" + '<div class="bar-labels">' + labels.join("") + "</div>";
 }
 

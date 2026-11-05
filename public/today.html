@@ -9,15 +9,17 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="base.css">
-<link rel="stylesheet" href="today.css">
+<link rel="stylesheet" href="dashboard.css">
 </head>
-<body>
+<!-- The Today and Trends pages share dashboard.js; data-page says which this is -->
+<body data-page="today">
 <main class="page">
   <header class="topbar">
     <div class="brand-nav">
       <div class="brand">Screen Time</div>
       <nav class="tabs" aria-label="Pages">
         <a href="/" aria-current="page">Today</a>
+        <a href="/trends">Trends</a>
         <a href="/apps">Apps</a>
         <a href="/organize">Organize</a>
       </nav>
@@ -32,20 +34,24 @@
   <div id="content">
     <div class="range-bar">
       <div class="day-nav">
-        <button class="round-button" id="prev" aria-label="Earlier">
+        <button class="round-button" id="prev" aria-label="Day before">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
         </button>
         <h1 class="day-label" id="range-label"></h1>
-        <button class="round-button" id="next" aria-label="Later">
+        <button class="round-button" id="next" aria-label="Day after">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
         </button>
       </div>
-      <div class="seg" id="device-filter" role="group" aria-label="Devices"></div>
+      <div class="range-switches">
+        <div class="seg" id="device-filter" role="group" aria-label="Devices"></div>
+      </div>
     </div>
 
-    <div class="period-cards" id="period-cards" role="group" aria-label="Period"></div>
+    <div class="period-cards" id="period-cards"></div>
     <div class="legend" id="legend"></div>
+    <div class="focus-bar" id="focus-bar" hidden></div>
 
+    <!-- everything below is about the day above -->
     <section class="card">
       <div class="card-head">
         <h2 id="timeline-title">Through the day</h2>
@@ -55,7 +61,6 @@
     </section>
 
     <div class="two-col">
-      <!-- the day added up, or for 7 or 30 days the average day added up -->
       <section class="card" id="run-card">
         <div class="card-head">
           <h2 id="run-title">So far today</h2>
@@ -73,47 +78,17 @@
       </section>
     </div>
 
-    <div class="two-col">
-      <section class="card">
-        <div class="card-head">
-          <h2 id="apps-title">Where the time went</h2>
-          <div class="seg small" id="view-switch" role="group" aria-label="Show"></div>
-        </div>
-        <div id="top-apps"></div>
-      </section>
+    <section class="card">
+      <div class="card-head">
+        <h2 id="apps-title">Where the time went</h2>
+        <span class="hint" id="apps-hint"></span>
+      </div>
+      <div id="top-apps"></div>
+    </section>
 
-      <section class="card bars-card">
-        <div class="card-head">
-          <h2>Week by week</h2>
-          <div class="head-right">
-            <span class="hint" id="weeks-avg"></span>
-            <div class="seg small" id="weeks-switch" role="group" aria-label="Show"></div>
-          </div>
-        </div>
-        <div id="weeks"></div>
-      </section>
-    </div>
-
-    <div class="two-col">
-      <section class="card">
-        <div class="card-head">
-          <h2>Hours of the week</h2>
-          <span class="hint" id="hours-hint"></span>
-        </div>
-        <div id="hours-heatmap"></div>
-      </section>
-
-      <section class="card bars-card">
-        <div class="card-head">
-          <h2>Your weekdays</h2>
-          <span class="hint" id="weekdays-hint"></span>
-        </div>
-        <div id="weekdays" class="weekdays"></div>
-      </section>
-    </div>
   </div>
 </main>
 <div class="tip" id="tip" role="tooltip" hidden></div>
-<script type="module" src="today.js"></script>
+<script type="module" src="dashboard.js"></script>
 </body>
 </html>

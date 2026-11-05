@@ -586,7 +586,9 @@ function renderCategoryView(c, key) {
   document.getElementById("detail-view").innerHTML = statCards(stats) + appList +
     '<div class="detail-grid">' + weekCard(trend, totals) + weekdayCard(trend, totals, color, catName(key)) + "</div>" +
     '<div class="detail-grid">' + runCard(matches) + hoursCard(trend, matches, color) + "</div>" +
-    (key === UNTRACKED_KEY ? "" : '<a class="detail-link" href="/organize">Edit categories</a>');
+    (key === UNTRACKED_KEY ? "" : '<div class="detail-links"><a class="detail-link" href="/trends#focus=' + encodeURIComponent("cat:" + String(key)) +
+      (state.device === "all" ? "" : "&device=" + state.device) + '">See its days and hours in Trends</a>' +
+      '<a class="detail-link" href="/organize">Edit categories</a></div>');
 }
 
 // ---------- drawing and clicks ----------

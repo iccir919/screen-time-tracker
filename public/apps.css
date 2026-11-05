@@ -100,6 +100,7 @@
 .member-trend { width: 100%; height: 26px; }
 .member-trend polyline { fill: none; stroke-width: 2.2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .member-time { font-weight: 600; }
+.detail-links { display: flex; flex-wrap: wrap; gap: 8px 24px; }
 .detail-link { font-size: 14px; font-weight: 600; text-underline-offset: 3px; }
 
 @media (max-width: 560px) {
