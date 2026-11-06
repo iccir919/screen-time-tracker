@@ -4,40 +4,38 @@
 // is (<body data-page="today"> or "trends"), and each part below is drawn
 // only if the page has a place for it.
 //
-// Today is about one day; the arrows move a day at a time and everything
-// follows: the timeline by device, so far today (added up through the day,
-// against last week's same weekday and its 6-week average), the last 8
-// days, and where the time went by category (with its top apps), each with
-// when it happened by hour. The 30-day card opens Trends.
+// Today has a Day and a Week view. Day: the timeline by device, so far
+// today (added up through the day, against last week's same weekday and its
+// 6-week average), the last 8 days, and the most used apps or categories.
+// Week: the 7 days before as bars, with the most used apps (or categories)
+// as daily averages. The day card opens Day, the 7-day card opens Week, and the
+// 30-day card opens Trends. Clicking an app or category highlights it on
+// the page (the rest fades back), and so does clicking a block on the
+// timeline (its app, or its category when Most used shows categories).
+// Clear it at the top of Most used, with Esc, or by clicking it again.
 //
 // Trends is about the last 30 days, ending on a day you can move (the
-// arrows move 30 days): day by day, an average day added up, and Patterns
-// (by hour, by weekday, or the last 6 weeks). The category buttons at the
-// top spotlight categories in every chart, cards included. Clicking a day
+// arrows move 30 days): day by day, the last day against an average day
+// added up, Patterns (by hour with the last day as a line, by weekday, or
+// the last 6 weeks), and the top apps. The category buttons at the top
+// spotlight categories in every chart, cards included. Clicking a day
 // opens it in Today.
-//
-// On Today you can follow one category or one app: pick it in "Where the
-// time went" or the legend and every chart shows just that, with the rest
-// in gray where it helps to see the whole day. The bar at the top says
-// what's picked, opens it on the Apps page, and clears it.
 //
 // Color means category everywhere (the colors you pick on Organize).
 //
 // Loads /api/usage from the local server (server.mjs); shared helpers and
 // charts are in common.js. The address keeps what you picked, for example
-// /#day=2026-10-26&device=0&focus=cat:2 or /trends#pattern=weekdays&only=2,5
+// /#day=2026-10-26&device=0&view=week&focus=cat:2 or /trends#pattern=weekdays&only=2,5
 
 import { setupRefresh, showLastArchived } from "./refresh.js";
 import {
   DAY, WEEKDAYS, loadUsage, esc, fmt, dateOf, fmtDate, weekdayOf, isoDay, dayFromIso, fmtClock,
   todayIdx, hideTip, UNTRACKED_KEY, categoryKeys, categoryColor, categoryName,
   hourName, localNow, STEPS, stepTotals, runningTotal, runningTotalHtml,
-  heatShade,
 } from "./common.js";
 
 const PAGE = document.body.dataset.page === "trends" ? "trends" : "today";
 const SESSION_GAP = 60;          // uses of the same app less than this apart count as one open
-const MAX_TOP_ROWS = 8;
 const WEEKS_SHOWN = 6;
 const UNTRACKED = -1;            // stands in for an app index for untracked time
 const PERIODS = ["7", "30"];     // the average cards on Today; Trends is always 30 days
@@ -153,13 +151,14 @@ const matches = (app) => !state.focus ||
 const focusName = () => (state.focus.app !== undefined ? appName(state.focus.app) : catName(state.focus.cat));
 // Untracked's own gray is too close to the rest's, so it's drawn darker
 const focusColor = () => (state.focus.cat === UNTRACKED_KEY ? "var(--heat-4)" : solidColor(state.focus.cat));
-const REST = "#DCDCE0"; // the rest of the time, behind what's followed
 
 // ---------- what you picked ----------
 
-// period: "day" on Today; "7" or "30" on Trends. focus: what's being
-// followed, null for everything, { cat } for a category, { cat, app } for an app.
-const state = { day: todayIdx, period: PAGE === "today" ? "day" : "30", device: "all", pattern: "hours", focus: null, only: new Set() };
+// period: "day" or "7" on Today (the Day and Week views), "30" on Trends.
+// focus: what's highlighted on Today, null for everything, { cat } for a
+// category, { cat, app } for an app. list: Today's Most used shows "apps" or
+// "cats".
+const state = { day: todayIdx, period: PAGE === "today" ? "day" : "30", device: "all", pattern: "hours", list: "apps", focus: null, only: new Set() };
 {
   const hash = decodeURIComponent(location.hash.slice(1));
   const params = new URLSearchParams(hash);
@@ -168,6 +167,8 @@ const state = { day: todayIdx, period: PAGE === "today" ? "day" : "30", device: 
   const device = params.get("device");
   if (device !== null && DATA.devices[Number(device)] !== undefined) state.device = device;
   if (["weekdays", "weeks"].includes(params.get("pattern"))) state.pattern = params.get("pattern");
+  if (PAGE === "today" && params.get("view") === "week") state.period = "7";
+  if (PAGE === "today" && params.get("list") === "cats") state.list = "cats";
   // The spotlighted categories on Trends, like only=2,5 (none: everything)
   for (const text of (params.get("only") ?? "").split(",")) {
     const key = CAT_KEYS.find((k) => String(k) === text);
@@ -193,6 +194,8 @@ function writeAddress() {
   if (state.day !== todayIdx) params.set("day", isoDay(state.day));
   if (state.device !== "all") params.set("device", state.device);
   if (PAGE === "trends" && state.pattern !== "hours") params.set("pattern", state.pattern);
+  if (PAGE === "today" && state.period === "7") params.set("view", "week");
+  if (PAGE === "today" && state.list === "cats") params.set("list", "cats");
   if (state.only.size) params.set("only", [...state.only].join(","));
   if (state.focus) params.set("focus", focusText());
   const text = params.toString();
@@ -215,7 +218,7 @@ const shownCat = (key) => !state.only.size || state.only.has(key);
 const counted = (app) => matches(app) && shownCat(catOf(app));
 // Seconds per category, only the ones that show
 const shownCats = (totals) => { for (const k of [...totals.keys()]) if (!shownCat(k)) totals.delete(k); return totals; };
-const devicePick = (day, dev) => (state.only.size
+const devicePick = (day, dev) => (state.only.size || state.focus
   ? items(day).reduce((a, [d, app, s, e]) => a + (d === dev && counted(app) ? e - s : 0), 0) : deviceTotal(day, dev));
 const pickTotal = (day) => (state.focus || state.only.size ? items(day).reduce((a, [, app, s, e]) => a + (counted(app) ? e - s : 0), 0) : total(day));
 
@@ -232,6 +235,23 @@ function categoryTotals(days) {
   const n = Math.max(1, days.length);
   for (const [key, secs] of out) out.set(key, secs / n);
   return out;
+}
+
+// Each app's daily average over some days (only spotlighted categories on
+// Trends), biggest first: [{ app, secs, devs }]. Untracked isn't an app.
+function appAverages(days) {
+  const out = new Map();
+  for (const d of days) {
+    for (const [dev, app, start, end] of items(d)) {
+      if (app === UNTRACKED || !counted(app)) continue;
+      if (!out.has(app)) out.set(app, { app, secs: 0, devs: new Set() });
+      const a = out.get(app);
+      a.secs += end - start;
+      a.devs.add(dev);
+    }
+  }
+  const n = Math.max(1, days.length);
+  return [...out.values()].map((a) => ({ ...a, secs: a.secs / n })).sort((a, b) => b.secs - a.secs);
 }
 
 // The days a period covers, ending on the chosen day. While today is still
@@ -287,17 +307,6 @@ function stackedParts(totals, sum, mode) {
 const categoryLines = (totals, min = 0) =>
   [...totals].sort((a, b) => b[1] - a[1]).filter(([, s]) => s >= min).map(([key, s]) => catName(key) + " " + fmt(s));
 
-// A shade of a category's color for a cell that's this share (0 to 1) of
-// the busiest cell: the same rule as every grid (heatShade in common.js)
-const shade = (key, share) => (share < 0.01 ? "var(--track)" : heatShade(share, solidColor(key)));
-
-// A bar's two pieces with something followed: it at the bottom, the rest in gray
-function pickParts(pick, sum) {
-  const pct = (v) => ((v / (sum || 1)) * 100).toFixed(3);
-  return '<span style="height:' + pct(pick) + "%;background:" + focusColor() + '"></span>' +
-    '<span style="height:' + pct(sum - pick) + "%;background:" + REST + '"></span>';
-}
-
 // ---------- the top: date or range, switches, the three cards ----------
 
 function renderRangeBar() {
@@ -323,11 +332,12 @@ function renderRangeBar() {
 
 // One card: a label (and a small note on the right), a big value, a bar
 // of its categories, and a bottom line
-function card({ tag = "div", href = "", pressed = false, label, small = "", value, cats = null, bottom = "" }) {
+function card({ tag = "div", href = "", attrs = "", pressed = false, label, small = "", value, text = false, cats = null, bottom = "" }) {
   const sum = cats ? [...cats.values()].reduce((a, b) => a + b, 0) : 0;
-  return "<" + tag + ' class="period-card' + (pressed ? " chosen" : "") + (href ? " link" : "") + '"' + (href ? ' href="' + href + '"' : "") + ">" +
+  return "<" + tag + ' class="period-card' + (pressed ? " chosen" : "") + (href ? " link" : "") + '"' + (href ? ' href="' + href + '"' : "") +
+    (tag === "button" ? ' type="button"' : "") + (attrs ? " " + attrs : "") + ">" +
     '<span class="label"><span>' + esc(label) + "</span><small>" + esc(small) + "</small></span>" +
-    '<span class="value' + (value === null ? " none" : "") + '">' + (value ?? "No data") + "</span>" +
+    '<span class="value' + (value === null ? " none" : text ? " text" : "") + '">' + (value === null ? "No data" : text ? esc(value) : value) + "</span>" +
     '<span class="share"' + (sum ? ' data-tip="' + esc(categoryLines(cats).join("\n")) + '"' : "") + ">" +
     (sum ? stackedParts(cats, sum, "flex") : "") + "</span>" +
     '<span class="split">' + esc(bottom) + "</span></" + tag + ">";
@@ -341,8 +351,11 @@ function periodSummary(p, end = state.day) {
     const a = average(days.filter((d) => hasData(d, dev)), (d) => devicePick(d, dev));
     return DATA.devices[dev] + " " + (a === null ? "no data" : fmt(a));
   });
-  return { days, avg, cats: shownCats(categoryTotals(days)), split };
+  return { days, avg, cats: cardCats(days, avg), split };
 }
+
+// A card's color bar: the categories that show, or just the highlighted one
+const cardCats = (days, value) => (state.focus ? new Map(value ? [[state.focus.cat, value]] : []) : shownCats(categoryTotals(days)));
 
 function renderCards() {
   // The device split only helps with more than one device; with one it
@@ -351,22 +364,29 @@ function renderCards() {
   const bottomOf = (split, note = "") => (devs.length > 1 ? split : []).concat(note ? [note] : []).join("  ·  ");
   const cards = [];
   if (PAGE === "today") {
+    // The day card shows the Day view and the 7-day card the Week view, in
+    // place; the 30-day card opens Trends
     const n = dayName(state.day, false);
     const days = anyData(state.day) ? [state.day] : [];
     cards.push(card({
-      pressed: true, label: n.relative || n.date, value: days.length ? fmt(total(state.day)) : null, cats: categoryTotals(days),
-      bottom: bottomOf(devs.map((dev) => DATA.devices[dev] + " " + (hasData(state.day, dev) ? fmt(deviceTotal(state.day, dev)) : "no data"))),
+      tag: "button", attrs: 'data-view="day"', pressed: state.period === "day", label: n.relative || n.date,
+      value: days.length ? fmt(pickTotal(state.day)) : null, cats: cardCats(days, days.length ? pickTotal(state.day) : 0),
+      bottom: bottomOf(devs.map((dev) => DATA.devices[dev] + " " + (hasData(state.day, dev) ? fmt(devicePick(state.day, dev)) : "no data"))),
     }));
-    // The averages; the 30-day one opens Trends, which is about those 30 days
-    for (const p of PERIODS) {
-      const { from, to } = periodWindow(p);
-      const s = periodSummary(p);
-      const link = p === "30";
-      cards.push(card({
-        tag: link ? "a" : "div", href: link ? trendsLink() : "", label: p + "-day average", small: rangeText(from, to),
-        value: s.avg === null ? null : fmt(s.avg), cats: s.cats, bottom: bottomOf(s.split, link ? "See in Trends ›" : ""),
-      }));
-    }
+    const week = periodWindow("7");
+    const s7 = periodSummary("7");
+    const before = periodSummary("7", week.to - 7).avg;
+    const change = s7.avg !== null && before !== null ? (s7.avg >= before ? "+" : "−") + fmt(Math.abs(s7.avg - before)) + " vs the week before" : "";
+    cards.push(card({
+      tag: "button", attrs: 'data-view="7"', pressed: state.period === "7", label: "7-day average", small: rangeText(week.from, week.to),
+      value: s7.avg === null ? null : fmt(s7.avg), cats: s7.cats, bottom: change,
+    }));
+    const month = periodWindow("30");
+    const s30 = periodSummary("30");
+    cards.push(card({
+      tag: "a", href: trendsLink(), label: "30-day average", small: rangeText(month.from, month.to),
+      value: s30.avg === null ? null : fmt(s30.avg), cats: s30.cats, bottom: bottomOf(s30.split, "See in Trends ›"),
+    }));
   } else {
     const p = state.period, n = Number(p);
     const { from, to } = periodWindow(p);
@@ -383,53 +403,37 @@ function renderCards() {
       value: busiest === null ? null : fmt(pickTotal(busiest)), cats: busiest === null ? null : shownCats(categoryTotals([busiest])),
       bottom: busiest === null ? "" : "See it in Today ›",
     }));
-    // Against the period before
-    const prevFrom = from - n, prevTo = from - 1;
-    const prevDays = []; for (let d = prevFrom; d <= prevTo; d++) if (anyData(d)) prevDays.push(d);
-    const prevAvg = average(prevDays, pickTotal);
-    const diff = s.avg !== null && prevAvg !== null ? s.avg - prevAvg : null;
+    // The most used app (of the spotlighted categories), which opens it on the Apps page
+    const top = appAverages(s.days)[0];
     cards.push(card({
-      label: "Against the " + p + " days before", small: rangeText(prevFrom, prevTo),
-      value: diff === null ? null : (diff < 0 ? "−" : "+") + fmt(Math.abs(diff)), cats: shownCats(categoryTotals(prevDays)),
-      bottom: prevAvg === null ? "" : "Then " + fmt(prevAvg) + " a day",
+      tag: top ? "a" : "div", href: top ? appLink(top.app) : "", label: "Most used app", small: top ? catName(catOf(top.app)) : "",
+      value: top ? appName(top.app) : null, text: true, cats: top ? new Map([[catOf(top.app), top.secs]]) : null,
+      bottom: top ? fmt(top.secs) + " daily average  ·  See it in Apps ›" : "",
     }));
   }
   el("period-cards").innerHTML = cards.join("");
 }
 
-// The category colors used on the page, with their names (on Today, that
-// includes the 7 days before, which are in the bar chart)
+// Trends' category buttons: the categories in the period
 function renderLegend() {
-  const days = chosenDays();
-  if (PAGE === "today") for (let d = state.day - 7; d < state.day; d++) if (anyData(d)) days.push(d);
-  const cats = categoryTotals(days);
+  const cats = categoryTotals(chosenDays());
   const keys = CAT_KEYS.filter((key) => (cats.get(key) ?? 0) > 0);
-  if (PAGE === "trends") {
-    el("legend").innerHTML = toggleButtons(keys) +
-      (keys.length ? '<span class="legend-hint">' + (state.only.size ? "Click more to add them" : "Click a category to spotlight it") + "</span>" +
-        '<a class="legend-link" href="/organize">Edit categories</a>' : "");
-    return;
-  }
-  el("legend").innerHTML = keys.map((key) =>
-    '<button class="legend-item' + (state.focus && state.focus.app === undefined && state.focus.cat === key ? " on" : "") +
-    '" data-pick-cat="' + esc(String(key)) + '" data-tip="Follow ' + esc(catName(key)) + ' on this page">' +
-    '<span class="swatch" style="background:' + catColor(key) + '"></span>' + esc(catName(key)) + "</button>").join("") +
-    (keys.length ? (state.focus ? "" : '<span class="legend-hint">Click a category to follow it across the page</span>') +
+  el("legend").innerHTML = toggleButtons(keys) +
+    (keys.length ? '<span class="legend-hint">' + (state.only.size ? "Click more to add them" : "Click a category to spotlight it") + "</span>" +
       '<a class="legend-link" href="/organize">Edit categories</a>' : "");
 }
 
-// The bar saying what's followed, with a link to it on the Apps page
+// Above Today's cards while something is highlighted: what it is (every
+// number on the page is only that), and the one place to clear it
 function renderFocusBar() {
   const bar = el("focus-bar");
-  bar.hidden = !state.focus;
-  if (!state.focus) return;
   const f = state.focus;
-  const inCat = f.app !== undefined ? '<span class="muted"> in ' + esc(catName(f.cat)) + "</span>" : "";
-  const open = f.cat === UNTRACKED_KEY ? "" :
-    '<a href="' + (f.app !== undefined ? appLink(f.app) : categoryLink(f.cat)) + '">Open it in Apps ›</a>';
+  bar.hidden = !f;
+  if (!f) return;
+  const what = esc(focusName()) + (f.app !== undefined ? ' <span class="muted">· ' + esc(catName(f.cat)) + "</span>" : "");
   bar.innerHTML = '<span class="swatch" style="background:' + catColor(f.cat) + '"></span>' +
-    "<span>Showing <b>" + esc(focusName()) + "</b>" + inCat + "</span>" + open +
-    '<button class="focus-clear" data-clear>✕ Show everything</button>';
+    "<span>Highlighting <b>" + what + "</b></span>" +
+    '<button class="focus-clear" data-clear>Clear</button>';
 }
 
 // ---------- timeline: the day by device (Today), or an average day (Trends) ----------
@@ -441,30 +445,44 @@ function renderTimeline() {
   const ticks = "<div><span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>12a</span></div>";
   const axis = '<div class="hours"><span></span>' + ticks + "</div>";
 
-  if (state.period === "day") {
-    title.textContent = "Through the day";
-    hint.textContent = "Hover over a block for the app and time";
-    const e = byDay.get(state.day);
-    const start = state.day * DAY;
-    const pos = (from, to) => "left:" + (((from - start) / DAY) * 100).toFixed(3) + "%;width:" + (((to - from) / DAY) * 100).toFixed(3) + "%";
-    box.innerHTML = devs.map((dev) => {
-      const name = DATA.devices[dev];
-      const sessions = (e?.sessions ?? []).filter((s) => s[0] === dev);
-      const gaps = (e?.gaps ?? []).filter((g) => g[0] === dev);
-      if (!sessions.length && !gaps.length) {
-        return '<div class="lane"><span class="lane-name">' + esc(name) + '</span><div class="lane-track no-data">No data</div></div>';
-      }
-      const blocks = sessions.map(([, app, from, to, active]) =>
-        '<div class="block' + (matches(app) ? "" : " dim") + '" style="' + pos(from, to) + ";background:" + catColor(catOf(app)) + '" data-tip="' +
-        esc(appName(app) + " · " + catName(catOf(app)) + "\n" + fmtClock(from) + " to " + fmtClock(to) + " · " + fmt(active)) + '"></div>');
-      const gapBlocks = gaps.map(([, from, to, last]) => {
+  if (PAGE === "today") {
+    hint.textContent = "";
+    // A lane of blocks: sessions (and untracked time) on one day, from
+    // the given devices; dev names the device in the hover text
+    const lane = (name, day, laneDevs, cls = "", nameAttrs = "") => {
+      const e = byDay.get(day);
+      const start = day * DAY;
+      const pos = (from, to) => "left:" + (((from - start) / DAY) * 100).toFixed(3) + "%;width:" + (((to - from) / DAY) * 100).toFixed(3) + "%";
+      const sessions = (e?.sessions ?? []).filter((x) => laneDevs.includes(x[0]));
+      const gaps = (e?.gaps ?? []).filter((g) => laneDevs.includes(g[0]));
+      const label = '<span class="lane-name"' + nameAttrs + ">" + esc(name) + "</span>";
+      if (!sessions.length && !gaps.length) return '<div class="lane' + cls + '">' + label + '<div class="lane-track no-data">No data</div></div>';
+      const where = (dev) => (laneDevs.length > 1 ? " · " + DATA.devices[dev] : "");
+      const blocks = sessions.map(([dev, app, from, to, active]) =>
+        '<div class="block' + (state.focus ? (matches(app) ? " on" : " dim") : "") + '" ' +
+        (state.list === "cats" ? 'data-pick-cat="' + esc(String(catOf(app))) + '"' : 'data-pick-app="' + esc(appKey(app)) + '"') + ' style="' + pos(from, to) + ";background:" + catColor(catOf(app)) + '" data-tip="' +
+        esc(appName(app) + " · " + catName(catOf(app)) + where(dev) + "\n" + fmtClock(from) + " to " + fmtClock(to) + " · " + fmt(active)) + '"></div>');
+      const gapBlocks = gaps.map(([dev, from, to, last]) => {
         const before = last.length ? "\nLast opened: " + last.map(([app, at]) => appName(app) + " at " + fmtClock(at)).join(", ") : "";
-        return '<div class="block gap' + (matches(UNTRACKED) ? "" : " dim") + '" style="' + pos(from, to) + '" data-tip="' +
-          esc("Screen on, no app recorded\n" + fmtClock(from) + " to " + fmtClock(to) + " · " + fmt(to - from) + before) + '"></div>';
+        return '<div class="block gap' + (state.focus ? (matches(UNTRACKED) ? " on" : " dim") : "") + '" data-pick-cat="' + esc(String(UNTRACKED_KEY)) + '" style="' + pos(from, to) + '" data-tip="' +
+          esc("Screen on, no app recorded" + where(dev) + "\n" + fmtClock(from) + " to " + fmtClock(to) + " · " + fmt(to - from) + before) + '"></div>';
       });
-      return '<div class="lane"><span class="lane-name">' + esc(name) + '</span><div class="lane-track">' +
-        blocks.join("") + gapBlocks.join("") + "</div></div>";
-    }).join("") + axis;
+      return '<div class="lane' + cls + '">' + label + '<div class="lane-track">' + blocks.join("") + gapBlocks.join("") + "</div></div>";
+    };
+    if (state.period === "day") {
+      title.textContent = "Through the day";
+      box.innerHTML = devs.map((dev) => lane(DATA.devices[dev], state.day, [dev])).join("") + axis;
+      return;
+    }
+    // The Week view: one row per day (the devices together); a day's name opens it
+    title.textContent = "Through the week";
+    hint.textContent = "One row per day · click a day's name to see it";
+    const { from, to } = periodWindow(state.period);
+    const rows = [];
+    for (let d = from; d <= to; d++) {
+      rows.push(lane(fmtDate(d, { weekday: "short" }), d, devs, " week", ' role="button" tabindex="0" data-open-day="' + d + '" data-tip="' + esc(shortDate(d) + "\nClick to see this day") + '"'));
+    }
+    box.innerHTML = rows.join("") + axis;
     return;
   }
 
@@ -477,7 +495,7 @@ function renderTimeline() {
     '<button data-pattern="' + v + '" aria-pressed="' + (v === state.pattern) + '">' + text + "</button>").join("");
   const days = periodDays(state.period);
   if (state.pattern === "weekdays") {
-    hint.textContent = "An average Monday, Tuesday and so on";
+    hint.textContent = "Daily average for each weekday";
     const MON_FIRST = [1, 2, 3, 4, 5, 6, 0];
     box.innerHTML = days.length ? rowBars(MON_FIRST.map((w) => {
       const ds = days.filter((d) => weekdayOf(d) === w);
@@ -490,7 +508,7 @@ function renderTimeline() {
     return;
   }
   if (state.pattern === "weeks") {
-    hint.textContent = "A day, each of the 6 weeks to " + fmtDate(Math.min(state.day, todayIdx), { month: "short", day: "numeric" });
+    hint.textContent = "Daily average, each of the 6 weeks to " + fmtDate(Math.min(state.day, todayIdx), { month: "short", day: "numeric" });
     const weeks = sixWeeks();
     const full = weeks.filter((w) => !w.current);
     const avg = average(full.flatMap((w) => w.days), pickTotal);
@@ -506,7 +524,8 @@ function renderTimeline() {
   }
 
   // By hour: minutes in each hour, averaged over the days with data
-  hint.textContent = "Minutes per hour, an average day";
+  const win = periodWindow(state.period);
+  hint.textContent = "Minutes per hour, an average day " + rangeText(win.from, win.to);
   const perHour = Array.from({ length: 24 }, () => new Map());
   for (const d of days) {
     for (const [, app, start, end] of items(d)) {
@@ -527,7 +546,7 @@ function renderTimeline() {
     }
   }
   const hourSum = (h) => [...h.values()].reduce((x, y) => x + y, 0);
-  const max = Math.max(state.only.size ? 1 : 60, ...perHour.map(hourSum));
+  const max = Math.max(state.only.size ? 1 : 60, ...perHour.map(hourSum)) * 1.04;
   const bars = perHour.map((h, i) => {
     const sum = hourSum(h);
     const tip = [hourName(i) + ": " + fmt(sum)].concat(categoryLines(h, 30)).join("\n");
@@ -568,94 +587,123 @@ function rowBars(rows, { avg = null, avgText = "" } = {}) {
       '<span class="prow-time">' + (r.total === null ? "–" : fmt(r.total)) + (r.faded ? "<small>so far</small>" : "") + "</span></div>").join("") + "</div>";
 }
 
-// ---------- where the time went: apps or categories ----------
+// ---------- most used: apps or categories (Today) ----------
 
-function renderTopList() {
-  const box = el("top-apps");
+// One list with an Apps / Categories switch, under a thin bar of the day's
+// (or the week's) categories. Times are daily averages in the Week view.
+// Clicking a row highlights it on the page; clicking it again clears it.
+function renderLists() {
   const days = chosenDays();
   const isDay = state.period === "day";
-  el("apps-title").textContent = isDay ? "Where the time went" : "Where the time went, a day";
-  el("apps-hint").textContent = state.focus ? "Click again to go back" : "Click a category to follow it";
+  el("list-switch").innerHTML = [["apps", "Apps"], ["cats", "Categories"]].map(([v, text]) =>
+    '<button data-list="' + v + '" aria-pressed="' + (v === state.list) + '">' + text + "</button>").join("");
+  el("apps-hint").textContent = isDay ? "" : "Daily average, " + rangeText(periodWindow("7").from, periodWindow("7").to);
+  el("apps-hint").hidden = isDay;
   if (!days.length) {
-    box.innerHTML = '<p class="hint">Nothing recorded ' + (isDay ? "on this day." : "in this period.") + "</p>";
+    el("top-apps").innerHTML = '<p class="hint">Nothing recorded ' + (isDay ? "on this day." : "in these days.") + "</p>";
     return;
   }
-
-  // Per app and per category: seconds (per day on average), the devices,
-  // seconds in each hour, and seconds on each weekday
-  const counts = new Array(7).fill(0);
-  for (const d of days) counts[weekdayOf(d)]++;
-  const blank = () => ({ secs: 0, devs: new Set(), hours: new Array(24).fill(0), week: new Array(7).fill(0) });
-  const apps = new Map(), cats = new Map();
+  const apps = new Map(), cats = new Map(), devsOf = new Map();
   for (const d of days) {
-    const w = weekdayOf(d);
     for (const [dev, app, start, end] of items(d)) {
-      for (const [map, id] of [[apps, app], [cats, catOf(app)]]) {
-        if (!map.has(id)) map.set(id, blank());
-        const a = map.get(id);
-        a.secs += end - start;
-        a.week[w] += end - start;
-        a.devs.add(dev);
-        for (let t = start; t < end;) {
-          const upTo = Math.min(end, (Math.floor(t / 3600) + 1) * 3600);
-          a.hours[Math.floor((t % DAY) / 3600)] += upTo - t;
-          t = upTo;
-        }
+      apps.set(app, (apps.get(app) ?? 0) + end - start);
+      cats.set(catOf(app), (cats.get(catOf(app)) ?? 0) + end - start);
+      if (!devsOf.has(app)) devsOf.set(app, new Set());
+      devsOf.get(app).add(dev);
+    }
+  }
+  for (const m of [apps, cats]) for (const [k, v] of m) m.set(k, v / days.length);
+  const catSum = [...cats.values()].reduce((x, y) => x + y, 0);
+  const share = '<span class="share list-share" data-tip="' + esc(categoryLines(cats, 60).join("\n")) + '">' + stackedParts(cats, catSum, "flex") + "</span>";
+  const f = state.focus;
+  const row = (attr, on, name, sub, secs, key) =>
+    '<button class="list-row' + (on ? " on" : "") + '" ' + attr + (on ? ' style="--tint:' + solidColor(key) + '"' : "") + ">" +
+    '<span class="list-name"><span class="swatch" style="background:' + catColor(key) + '"></span><b>' + esc(name) + "</b>" +
+    (sub ? "<small>" + esc(sub) + "</small>" : "") + "</span>" +
+    '<span class="list-time">' + fmt(secs) + "</span></button>";
+
+  if (state.list === "cats") {
+    // Categories, biggest first; Untracked last, if it's at least a minute
+    const keys = [...cats.keys()].filter((k) => k !== UNTRACKED_KEY || cats.get(k) >= 60)
+      .sort((a, b) => (a === UNTRACKED_KEY) - (b === UNTRACKED_KEY) || cats.get(b) - cats.get(a));
+    el("top-apps").innerHTML = share + keys.map((k) =>
+      row('data-pick-cat="' + esc(String(k)) + '"', f && f.cat === k, catName(k),
+        Math.round((cats.get(k) / (catSum || 1)) * 100) + "%", cats.get(k), k)).join("") +
+      '<p class="list-more"><a class="more-link" href="/organize">Edit categories ›</a></p>';
+    return;
+  }
+  // Apps, biggest first; the same name on two devices gets its device named
+  const order = [...apps.keys()].filter((a) => a !== UNTRACKED).sort((a, b) => apps.get(b) - apps.get(a));
+  const nameCount = new Map();
+  for (const a of order) nameCount.set(appName(a), (nameCount.get(appName(a)) ?? 0) + 1);
+  el("top-apps").innerHTML = share + order.map((a) => {
+    const sub = nameCount.get(appName(a)) > 1 ? [...devsOf.get(a)].map((dev) => DATA.devices[dev]).join(" and ") : "";
+    return row('data-pick-app="' + esc(appKey(a)) + '"', f && (f.app === undefined ? f.cat === catOf(a) : f.app === a), appName(a), sub, apps.get(a), catOf(a));
+  }).join("") + '<p class="list-more">' +
+    '<a class="more-link" href="/apps#' + new URLSearchParams({ range: "7", device: state.device }) + '">Details on the Apps page ›</a></p>';
+}
+
+// ---------- top apps (Trends) ----------
+
+// The most used apps over the period (of the spotlighted categories): each
+// one's daily average, a small chart of its average day by hour, and four
+// bars for the daily average of each of the last four weeks (each app on its
+// own scale). The
+// app's name opens it on the Apps page; its category opens the category.
+function renderTopApps() {
+  const { from, to } = periodWindow(state.period);
+  const days = periodDays(state.period);
+  const list = appAverages(days).slice(0, 10);
+  el("top-apps-hint").textContent = state.only.size ? [...state.only].map(catName).join(", ") + " only" : "";
+  if (!list.length) {
+    el("trend-apps").innerHTML = '<p class="hint">No apps in this period.</p>';
+    return;
+  }
+  const nameCount = new Map();
+  for (const a of list) nameCount.set(appName(a.app), (nameCount.get(appName(a.app)) ?? 0) + 1);
+  // Four weeks, ending on the last day: each one's daily average
+  const weeks = [3, 2, 1, 0].map((k) => ({ from: to - 6 - k * 7, to: to - k * 7 }));
+  const weekDays = weeks.map((w) => { const ds = []; for (let d = w.from; d <= w.to; d++) if (anyData(d)) ds.push(d); return ds; });
+  // Seconds per hour of the day for each listed app, over the whole period
+  const hours = new Map(list.map((a) => [a.app, new Array(24).fill(0)]));
+  for (const d of days) {
+    for (const [, app, start, end] of items(d)) {
+      const sums = hours.get(app);
+      if (!sums) continue;
+      for (let t = start; t < end;) {
+        const upTo = Math.min(end, (Math.floor(t / 3600) + 1) * 3600);
+        sums[Math.floor((t % DAY) / 3600)] += upTo - t;
+        t = upTo;
       }
     }
   }
-  for (const a of [...apps.values(), ...cats.values()]) {
-    a.secs /= days.length;
-    a.hours = a.hours.map((s) => s / days.length);
-    a.week = a.week.map((s, w) => (counts[w] ? s / counts[w] : null));
-  }
-
-  // One row: the name, its time, then when it happens. Clicking it follows
-  // it on this page (clicking again goes back: an app to its category, a
-  // category to everything).
-  const f = state.focus;
-  const MON_FIRST = [1, 2, 3, 4, 5, 6, 0];
-  const cells = (name, key, vals, label, cls) => {
-    const max = Math.max(...vals.filter((v) => v !== null), 1);
-    return '<span class="' + cls + '">' + vals.map((v, i) => {
-      const bg = v === null ? "transparent" : v < 30 ? "var(--track)" : key === UNTRACKED_KEY ? heatShade(v / max) : shade(key, v / max);
-      return '<span style="background:' + bg + '" data-tip="' + esc(name + " · " + label(i) + "\n" + (v === null ? "No data" : v < 30 ? "Under a minute" : fmt(v)) + (isDay ? "" : " on average")) + '"></span>';
-    }).join("") + "</span>";
-  };
-  const row = (pick, look, name, second, a, key) =>
-    '<button class="tw-row' + look + '" ' + pick + ">" +
-    '<span class="tw-name"><span class="swatch" style="background:' + catColor(key) + '"></span><span class="app-name"><b>' + esc(name) + "</b><span>" + esc(second) + "</span></span></span>" +
-    '<span class="tw-time">' + fmt(a.secs) + "</span>" +
-    cells(name, key, a.hours, (h) => hourName(h), "tw-hours") +
-    (isDay ? "" : cells(name, key, MON_FIRST.map((w) => a.week[w]), (i) => WEEKDAYS[MON_FIRST[i]] + "s", "tw-days")) +
-    "</button>";
-  const head = '<div class="tw-row head"><span></span><span class="tw-time">' + (isDay ? "" : "a day") + "</span>" +
-    '<span class="tw-axis"><span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>12a</span></span>' +
-    (isDay ? "" : '<span class="tw-days">' + MON_FIRST.map((w) => "<span>" + WEEKDAYS[w][0] + "</span>").join("") + "</span>") + "</div>";
-  const appOrder = [...apps.keys()].filter((app) => app !== UNTRACKED || apps.get(app).secs >= 60)
-    .sort((a, b) => apps.get(b).secs - apps.get(a).secs);
-  // Each category's second line names its apps with their times (an app
-  // on two devices counts once); clicking a category follows it across the
-  // page (the Apps page has each app). Untracked goes last; a minute or
-  // less of it isn't worth a row.
-  const keys = [...cats.keys()].filter((k) => k !== UNTRACKED_KEY || cats.get(k).secs >= 60)
-    .sort((a, b) => (a === UNTRACKED_KEY) - (b === UNTRACKED_KEY) || cats.get(b).secs - cats.get(a).secs);
-  const shownKeys = keys; // every category, none hidden
-  const html = shownKeys.map((key) => {
-    const members = appOrder.filter((app) => catOf(app) === key);
-    const byName = new Map();
-    for (const app of members) byName.set(appName(app), (byName.get(appName(app)) ?? 0) + apps.get(app).secs);
-    const named = [...byName].sort((x, y) => y[1] - x[1]);
-    const second = key === UNTRACKED_KEY ? "Screen on, no app recorded"
-      : named.slice(0, 4).map(([name, secs]) => name + " " + fmt(secs)).join(" · ") + (named.length > 4 ? " · " + (named.length - 4) + " more" : "");
-    const picked = f && f.cat === key;
-    return row('data-pick-cat="' + esc(String(key)) + '"', picked && f.app === undefined ? " on" : "", catName(key), second, cats.get(key), key);
+  const head = '<div class="trend-app head"><span>App</span><span class="list-time">Daily average</span><span class="day-ticks"><span></span><span>6 AM</span><span>12 PM</span><span>6 PM</span></span>' +
+    '<span class="week-labels">' + weeks.map((w) => "<span>" + esc(fmtDate(w.from, { month: "short", day: "numeric" })) + "</span>").join("") + "</span></div>";
+  const rows = list.map((a) => {
+    const vals = weekDays.map((ds) => (ds.length ? ds.reduce((sum, d) => sum + items(d).reduce((x, [, app, s, e]) => x + (app === a.app ? e - s : 0), 0), 0) / ds.length : null));
+    const top = Math.max(1, ...vals.filter((v) => v !== null));
+    const cat = catOf(a.app);
+    const color = catColor(cat);
+    const device = nameCount.get(appName(a.app)) > 1 ? [...a.devs].map((dev) => DATA.devices[dev]).join(" and ") + " · " : "";
+    const perHour = hours.get(a.app).map((secs) => secs / Math.max(1, days.length));
+    const hourTop = Math.max(1, ...perHour);
+    const dayBars = perHour.map((v, h) => '<span data-tip="' + esc(appName(a.app) + "\n" + hourName(h) + ": " + fmt(v) + " on an average day") + '">' +
+      (v ? '<span style="height:' + Math.max(6, (v / hourTop) * 100).toFixed(1) + "%;background:" + color + '"></span>' : "") + "</span>").join("");
+    const bars = vals.map((v, i) => '<span class="week-bar" data-tip="' + esc(appName(a.app) + "\n" + rangeText(weeks[i].from, weeks[i].to) + ": " + (v === null ? "no data" : fmt(v) + " daily average")) + '">' +
+      (v ? '<span style="height:' + Math.max(4, (v / top) * 100).toFixed(1) + "%;background:" + color + '"></span>' : "") + "</span>").join("");
+    const catPart = cat === UNTRACKED_KEY
+      ? esc(catName(cat))
+      : '<a class="cat-name" href="' + categoryLink(cat) + '" data-tip="' + esc(catName(cat) + "\nClick to open it on the Apps page") + '">' + esc(catName(cat)) + "</a>";
+    return '<div class="trend-app">' +
+      '<span class="list-name"><span class="swatch" style="background:' + color + '"></span>' +
+      '<a class="app-name" href="' + appLink(a.app) + '" data-tip="' + esc(appName(a.app) + "\n" + fmt(a.secs) + " daily average\nClick to open it on the Apps page") + '">' + esc(appName(a.app)) + "</a>" +
+      "<small>" + esc(device) + catPart + "</small></span>" +
+      '<span class="list-time">' + fmt(a.secs) + "</span>" +
+      '<span class="day-bars">' + dayBars + "</span>" +
+      '<span class="week-bars">' + bars + "</span></div>";
   }).join("");
-  const params = new URLSearchParams({ range: isDay ? "7" : state.period, device: state.device });
-  const n = keys.length - shownKeys.length;
-  const more = '<a class="more-link" href="/apps#' + params + '">' +
-    (n > 0 ? "and " + n + " more " + (n === 1 ? "category" : "categories") + " · " : "") + "All apps ›</a>";
-  box.innerHTML = '<div class="tw' + (isDay ? "" : " with-days") + '">' + head + html + "</div>" + more;
+  el("trend-apps").innerHTML = head + rows +
+    '<a class="more-link" href="/apps#' + new URLSearchParams({ range: "30", device: state.device }) + '">All apps on the Apps page ›</a>';
 }
 
 // ---------- bars: the last 8 days (Today), or day by day (Trends) ----------
@@ -671,31 +719,34 @@ function renderBars() {
   const avg = isDay ? null : average(periodDays(state.period), pickTotal);
   el("bars-title").textContent = isDay
     ? (state.day === todayIdx ? "Last 8 days" : "8 days to " + fmtDate(state.day, { month: "short", day: "numeric" }))
-    : "Day by day";
+    : PAGE === "today" ? (win.to === todayIdx - 1 ? "Last 7 days" : "7 days to " + fmtDate(win.to, { month: "short", day: "numeric" })) : "Day by day";
   el("bars-hint").innerHTML = isDay
-    ? 'Click a day to see it · <a href="' + trendsLink() + '">See more in Trends ›</a>'
-    : '<span class="avg-key"></span>' + n + "-day average" + (state.focus ? " of " + esc(focusName()) : "") + " " + (avg === null ? "–" : "<b>" + fmt(avg) + "</b>");
+    ? "Click a day to see it"
+    :
+      '<span class="avg-key"></span>' + n + "-day average" + (state.focus ? " of " + esc(focusName()) : "") + " " + (avg === null ? "–" : "<b>" + fmt(avg) + "</b>");
 
-  const top = Math.max(state.only.size ? 60 : 3600, ...days.map(state.focus ? total : pickTotal), avg ?? 0) * 1.08;
+  // With something highlighted (Today) or spotlighted (Trends), the bars show
+  // only that, scaled to its own busiest day, so even a little-used app fills
+  // the chart
+  const top = Math.max(state.focus || state.only.size ? 60 : 3600, ...days.map(pickTotal), avg ?? 0) * 1.08;
   const many = n > 10;
   let anyPartial = false;
   const cols = days.map((d) => {
     const has = anyData(d);
     const partial = has && !complete(d);
     if (partial) anyPartial = true;
-    const t = state.focus ? total(d) : pickTotal(d);
+    const t = pickTotal(d);
     const cats = categoryTotals([d]);
     shownCats(cats);
     const label = shortDate(d);
-    const pick = state.focus ? pickTotal(d) : t;
-    const tip = [label + ": " + (has ? fmt(t) : "no data")]
-      .concat(state.focus && has ? [focusName() + " " + fmt(pick)] : [])
+    const tip = [label + ": " + (has ? (state.focus ? focusName() + " " : "") + fmt(t) : "no data")]
+      .concat(state.focus && has ? ["All apps " + fmt(total(d))] : [])
       .concat(partial ? ["Missing data from a device"] : [], state.focus ? [] : categoryLines(cats, 60).slice(0, 5), [isDay ? "Click to see this day" : "Click to see it in Today"]).join("\n");
     // On Today, the other days are faded; on Trends, all are in full color
     const cls = "stack" + (isDay && d !== state.day ? " faded" : "") + (partial ? " partial" : "");
     return '<button class="bar-col" data-day="' + d + '" data-tip="' + esc(tip) + '" aria-label="' + esc(label + ": " + (has ? fmt(t) : "no data")) + '">' +
-      (has ? '<span class="' + cls + '" style="height:' + ((t / top) * 100).toFixed(1) + '%">' +
-        (state.focus ? pickParts(pick, t) : stackedParts(cats, t, "height")) + "</span>"
+      (has && t > 0 ? '<span class="' + cls + '" style="height:' + ((t / top) * 100).toFixed(1) + '%">' +
+        (state.focus ? '<span style="height:100%;background:' + focusColor() + '"></span>' : stackedParts(cats, t, "height")) + "</span>"
         : '<span class="stack none"></span>') + "</button>";
   });
   const labels = days.map((d, i) => {
@@ -740,7 +791,7 @@ function toggleButtons(keys) {
   const spot = state.only.size > 0;
   return keys.map((k) =>
     '<button class="legend-item toggle' + (spot ? (state.only.has(k) ? " on" : " dim") : "") + '" data-toggle="' + esc(String(k)) +
-    '" aria-pressed="' + state.only.has(k) + '">' +
+    '" aria-pressed="' + state.only.has(k) + '"' + (state.only.has(k) ? ' style="--tint:' + solidColor(k) + '"' : "") + ">" +
     '<span class="swatch" style="background:' + catColor(k) + '"></span>' + esc(catName(k)) + "</button>").join("") +
     (spot ? '<button class="legend-item all" data-toggle="all">Show all</button>' : "");
 }
@@ -759,18 +810,33 @@ function renderRunning() {
     const lines = days.map(line);
     return lines[0].map((_, i) => lines.reduce((a, l) => a + l[i], 0) / lines.length);
   };
-  if (state.period !== "day") {
+  if (PAGE === "today" && state.period !== "day") {
+    // The Week view: the week's average day added up, against the week before
     const win = periodWindow(state.period);
-    const n = Number(state.period);
     const days = periodDays(state.period);
-    const before = [];
-    for (let d = win.from - n; d < win.from; d++) if (anyData(d)) before.push(d);
+    const before = periodDays(state.period, win.to - 7);
     el("run-title").textContent = "An average day, added up" + of;
-    el("run-hint").textContent = "Against the " + n + " days before";
+    el("run-hint").textContent = "Against the week before";
     const main = averageLine(days);
     el("run").innerHTML = main
       ? runningTotalHtml({ main, last: averageLine(before), avg: null },
-        { main: rangeText(win.from, win.to), last: rangeText(win.from - n, win.from - 1), avg: "" })
+        { main: rangeText(win.from, win.to), last: rangeText(win.from - 7, win.to - 7), avg: "" })
+      : '<p class="hint">No data in these days.</p>';
+    return;
+  }
+  if (state.period !== "day") {
+    // Trends: the last day (today so far, while it's going) against the
+    // period's average day, added up through the day
+    const win = periodWindow(state.period);
+    const days = periodDays(state.period);
+    const isToday = state.day === todayIdx;
+    const name = isToday ? "Today" : shortDate(state.day);
+    el("run-title").textContent = name + " against an average day";
+    el("run-hint").textContent = "Average of " + rangeText(win.from, win.to);
+    const avg = averageLine(days);
+    el("run").innerHTML = avg
+      ? runningTotalHtml({ main: anyData(state.day) ? line(state.day) : avg.map(() => 0), last: null, avg },
+        { main: name + (isToday ? " so far" : ""), last: "", avg: "Average day" }, isToday ? ((localNow() % DAY) / DAY) * STEPS : null)
       : '<p class="hint">No data in this period.</p>';
     return;
   }
@@ -821,8 +887,7 @@ document.addEventListener("click", (e) => {
   }
   update({});
 });
-// Following a category or app: picking it again goes back (an app to its
-// category, a category to everything)
+// Highlighting a category or app on Today: picking it again clears it
 document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-pick-cat], [data-pick-app], [data-clear]");
   if (!b) return;
@@ -835,13 +900,32 @@ document.addEventListener("click", (e) => {
   }
   const app = DATA.apps.findIndex((a) => a.id === b.dataset.pickApp);
   if (app === -1) return;
-  update({ focus: f && f.app === app ? { cat: catOf(app) } : { cat: catOf(app), app } });
+  update({ focus: f && f.app === app ? null : { cat: catOf(app), app } });
+});
+// Clearing the highlight on Today: Esc, or a click on an empty part of the timeline
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && state.focus) update({ focus: null });
+});
+document.addEventListener("click", (e) => {
+  if (state.focus && e.target.classList.contains("lane-track")) update({ focus: null });
+});
+// A day's name in Today's Week view shows that day
+document.addEventListener("click", (e) => {
+  const d = e.target.closest("[data-open-day]");
+  if (d) update({ day: Number(d.dataset.openDay), period: "day" });
+});
+// The Day and Week cards on Today; Most used: Apps or Categories
+document.addEventListener("click", (e) => {
+  const v = e.target.closest("[data-view]");
+  if (v && PAGE === "today") return update({ period: v.dataset.view });
+  const l = e.target.closest("[data-list]");
+  if (l) update({ list: l.dataset.list });
 });
 // A day in the bars: on Today it shows that day here; on Trends it opens Today
 on("bars", "click", (e) => {
   const target = e.target.closest("[data-day]");
   if (!target) return;
-  if (PAGE === "today") update({ day: Number(target.dataset.day) });
+  if (PAGE === "today") update({ day: Number(target.dataset.day), period: "day" });
   else location.href = todayLink(Number(target.dataset.day));
 });
 on("pattern-switch", "click", (e) => {
@@ -860,12 +944,13 @@ function render() {
   writeAddress();
   renderRangeBar();
   renderCards();
-  renderLegend();
-  renderFocusBar();
+  if (shown("legend")) renderLegend();
+  if (shown("focus-bar")) renderFocusBar();
   if (shown("timeline")) renderTimeline();
-  if (shown("top-apps")) renderTopList();
+  if (shown("top-apps")) renderLists();
   if (shown("run")) renderRunning();
   if (shown("bars")) renderBars();
+  if (shown("trend-apps")) renderTopApps();
 }
 
 setDevices();

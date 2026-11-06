@@ -47,44 +47,50 @@
       </div>
     </div>
 
-    <div class="period-cards" id="period-cards"></div>
-    <div class="legend" id="legend"></div>
+    <!-- shown while something is highlighted: it labels every number below -->
     <div class="focus-bar" id="focus-bar" hidden></div>
+    <div class="period-cards" id="period-cards"></div>
 
-    <!-- everything below is about the day above -->
-    <section class="card">
-      <div class="card-head">
-        <h2 id="timeline-title">Through the day</h2>
-        <span class="hint" id="timeline-hint"></span>
+    <!-- the day's charts on the left; Most used on the right is the color key
+         and the controls: clicking an app or category highlights it -->
+    <div class="side-layout">
+      <div class="side-main">
+        <section class="card">
+          <div class="card-head">
+            <h2 id="timeline-title">Through the day</h2>
+            <span class="hint" id="timeline-hint"></span>
+          </div>
+          <div id="timeline"></div>
+        </section>
+
+        <section class="card" id="run-card">
+          <div class="card-head">
+            <h2 id="run-title">So far today</h2>
+            <span class="hint" id="run-hint"></span>
+          </div>
+          <div id="run"></div>
+        </section>
+
+        <section class="card bars-card">
+          <div class="card-head">
+            <h2 id="bars-title">Last 8 days</h2>
+            <span class="hint" id="bars-hint"></span>
+          </div>
+          <div id="bars"></div>
+        </section>
       </div>
-      <div id="timeline"></div>
-    </section>
 
-    <div class="two-col">
-      <section class="card" id="run-card">
-        <div class="card-head">
-          <h2 id="run-title">So far today</h2>
-          <span class="hint" id="run-hint"></span>
-        </div>
-        <div id="run"></div>
-      </section>
-
-      <section class="card bars-card">
-        <div class="card-head">
-          <h2 id="bars-title">Last 8 days</h2>
-          <span class="hint" id="bars-hint"></span>
-        </div>
-        <div id="bars"></div>
-      </section>
+      <aside class="side-panel">
+        <section class="card">
+          <div class="card-head">
+            <h2>Most used</h2>
+            <div class="seg small" id="list-switch" role="group" aria-label="Show"></div>
+          </div>
+          <p class="hint list-when" id="apps-hint"></p>
+          <div id="top-apps"></div>
+        </section>
+      </aside>
     </div>
-
-    <section class="card">
-      <div class="card-head">
-        <h2 id="apps-title">Where the time went</h2>
-        <span class="hint" id="apps-hint"></span>
-      </div>
-      <div id="top-apps"></div>
-    </section>
 
   </div>
 </main>
