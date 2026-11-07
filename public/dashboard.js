@@ -11,8 +11,8 @@
 // as daily averages. The day card opens Day, the 7-day card opens Week, and the
 // 30-day card opens Trends. Clicking an app or category highlights it on
 // the page (the rest fades back), and so does clicking a block on the
-// timeline (its app, or its category when Most used shows categories).
-// Clear it at the top of Most used, with Esc, or by clicking it again.
+// timeline (its app, or its category when the side list shows categories).
+// Clear it in the bar above the cards, with Esc, or by clicking it again.
 //
 // Trends is about the last 30 days, ending on a day you can move (the
 // arrows move 30 days): day by day, the last day against an average day
@@ -156,7 +156,7 @@ const focusColor = () => (state.focus.cat === UNTRACKED_KEY ? "var(--heat-4)" : 
 
 // period: "day" or "7" on Today (the Day and Week views), "30" on Trends.
 // focus: what's highlighted on Today, null for everything, { cat } for a
-// category, { cat, app } for an app. list: Today's Most used shows "apps" or
+// category, { cat, app } for an app. list: Today's side list (Used today) shows "apps" or
 // "cats".
 const state = { day: todayIdx, period: PAGE === "today" ? "day" : "30", device: "all", pattern: "hours", list: "apps", focus: null, only: new Set() };
 {
@@ -471,7 +471,7 @@ function renderTimeline() {
     };
     if (state.period === "day") {
       title.textContent = "Through the day";
-      box.innerHTML = devs.map((dev) => lane(DATA.devices[dev], state.day, [dev])).join("") + axis;
+      box.innerHTML = todayHours([state.day]) + devs.map((dev) => lane(DATA.devices[dev], state.day, [dev])).join("") + axis;
       return;
     }
     // The Week view: one row per day (the devices together); a day's name opens it
@@ -482,7 +482,7 @@ function renderTimeline() {
     for (let d = from; d <= to; d++) {
       rows.push(lane(fmtDate(d, { weekday: "short" }), d, devs, " week", ' role="button" tabindex="0" data-open-day="' + d + '" data-tip="' + esc(shortDate(d) + "\nClick to see this day") + '"'));
     }
-    box.innerHTML = rows.join("") + axis;
+    box.innerHTML = todayHours(periodDays(state.period)) + rows.join("") + axis;
     return;
   }
 
@@ -558,6 +558,51 @@ function renderTimeline() {
     : '<p class="hint">No data in this period.</p>';
 }
 
+// Today: minutes in each hour above the timeline, lined up with its lanes.
+// The day's own hours in the Day view, an average day in the Week view.
+// Each bar is split by category, and clicking a piece highlights that
+// category. With something highlighted, a bar shows just its part of the
+// hour, with the rest of the hour faded behind it.
+function todayHours(days) {
+  const perHour = Array.from({ length: 24 }, () => new Map());
+  const picked = new Array(24).fill(0);
+  for (const d of days) {
+    for (const [, app, start, end] of items(d)) {
+      const key = catOf(app);
+      const hit = state.focus && matches(app);
+      for (let t = start; t < end;) {
+        const upTo = Math.min(end, (Math.floor(t / 3600) + 1) * 3600);
+        const i = Math.floor((t % DAY) / 3600);
+        perHour[i].set(key, (perHour[i].get(key) ?? 0) + upTo - t);
+        if (hit) picked[i] += upTo - t;
+        t = upTo;
+      }
+    }
+  }
+  const n = Math.max(1, days.length);
+  for (const h of perHour) for (const [key, secs] of h) h.set(key, secs / n);
+  const hourSum = (h) => [...h.values()].reduce((x, y) => x + y, 0);
+  const max = Math.max(600, ...perHour.map(hourSum)) * 1.04;
+  const avg = days.length > 1 ? " on an average day" : "";
+  const bars = perHour.map((h, i) => {
+    const sum = hourSum(h);
+    let pieces;
+    let tip;
+    if (state.focus) {
+      const mine = picked[i] / n;
+      tip = hourName(i) + avg + ": " + fmt(mine) + " of " + focusName() + (sum ? " (" + fmt(sum) + " in all)" : "");
+      pieces = (mine ? '<span style="height:' + ((mine / (sum || 1)) * 100).toFixed(3) + "%;background:" + focusColor() + '"></span>' : "") +
+        (sum - mine > 0 ? '<span class="rest" style="height:' + (((sum - mine) / (sum || 1)) * 100).toFixed(3) + '%"></span>' : "");
+    } else {
+      tip = [hourName(i) + avg + ": " + fmt(sum)].concat(categoryLines(h, 30)).join("\n");
+      pieces = CAT_KEYS.filter((key) => (h.get(key) ?? 0) > 0).map((key) =>
+        '<span data-pick-cat="' + esc(String(key)) + '" style="height:' + ((h.get(key) / (sum || 1)) * 100).toFixed(3) + "%;background:" + catColor(key) + '"></span>').join("");
+    }
+    return '<div class="hour-bar" data-tip="' + esc(tip) + '"><div class="stack" style="height:' + ((sum / max) * 100).toFixed(2) + '%">' + pieces + "</div></div>";
+  });
+  return '<div class="lane-hours"><span class="lane-name">' + (days.length > 1 ? "Avg" : "Hours") + '</span><div class="hour-bars">' + bars.join("") + "</div></div>";
+}
+
 // Pieces of a bar, one per category, each opening that category on the Apps
 // page (Untracked has no page, so it's a plain piece). label goes in front
 // of the hover text, like "Mon" or "9a".
@@ -597,6 +642,8 @@ function renderLists() {
   const isDay = state.period === "day";
   el("list-switch").innerHTML = [["apps", "Apps"], ["cats", "Categories"]].map(([v, text]) =>
     '<button data-list="' + v + '" aria-pressed="' + (v === state.list) + '">' + text + "</button>").join("");
+  // The heading says which time it's about: "Used today", "Used on Monday", "Used this week"
+  el("list-title").textContent = !isDay ? "Used this week" : state.day === todayIdx ? "Used today" : "Used on " + fmtDate(state.day, { weekday: "long" });
   el("apps-hint").textContent = isDay ? "" : "Daily average, " + rangeText(periodWindow("7").from, periodWindow("7").to);
   el("apps-hint").hidden = isDay;
   if (!days.length) {
@@ -646,12 +693,11 @@ function renderLists() {
 // ---------- top apps (Trends) ----------
 
 // The most used apps over the period (of the spotlighted categories): each
-// one's daily average, a small chart of its average day by hour, and four
-// bars for the daily average of each of the last four weeks (each app on its
-// own scale). The
-// app's name opens it on the Apps page; its category opens the category.
+// one's daily average, its share of the time shown (all of it, or the
+// spotlighted categories'), and a small chart of its average day by hour
+// (each app on its own scale). The app's name opens it on the Apps page;
+// its category opens the category.
 function renderTopApps() {
-  const { from, to } = periodWindow(state.period);
   const days = periodDays(state.period);
   const list = appAverages(days).slice(0, 10);
   el("top-apps-hint").textContent = state.only.size ? [...state.only].map(catName).join(", ") + " only" : "";
@@ -661,9 +707,9 @@ function renderTopApps() {
   }
   const nameCount = new Map();
   for (const a of list) nameCount.set(appName(a.app), (nameCount.get(appName(a.app)) ?? 0) + 1);
-  // Four weeks, ending on the last day: each one's daily average
-  const weeks = [3, 2, 1, 0].map((k) => ({ from: to - 6 - k * 7, to: to - k * 7 }));
-  const weekDays = weeks.map((w) => { const ds = []; for (let d = w.from; d <= w.to; d++) if (anyData(d)) ds.push(d); return ds; });
+  // What a share is out of: the daily average of everything shown
+  const whole = average(days, pickTotal) || 1;
+  const wholeName = state.only.size ? [...state.only].map(catName).join(" and ") : "all your time";
   // Seconds per hour of the day for each listed app, over the whole period
   const hours = new Map(list.map((a) => [a.app, new Array(24).fill(0)]));
   for (const d of days) {
@@ -677,20 +723,18 @@ function renderTopApps() {
       }
     }
   }
-  const head = '<div class="trend-app head"><span>App</span><span class="list-time">Daily average</span><span class="day-ticks"><span></span><span>6 AM</span><span>12 PM</span><span>6 PM</span></span>' +
-    '<span class="week-labels">' + weeks.map((w) => "<span>" + esc(fmtDate(w.from, { month: "short", day: "numeric" })) + "</span>").join("") + "</span></div>";
+  const head = '<div class="trend-app head"><span>App</span><span class="list-time">Daily average</span>' +
+    '<span class="list-time" data-tip="' + esc("Share of " + wholeName) + '">Share</span>' +
+    '<span class="day-ticks"><span></span><span>6 AM</span><span>12 PM</span><span>6 PM</span></span></div>';
   const rows = list.map((a) => {
-    const vals = weekDays.map((ds) => (ds.length ? ds.reduce((sum, d) => sum + items(d).reduce((x, [, app, s, e]) => x + (app === a.app ? e - s : 0), 0), 0) / ds.length : null));
-    const top = Math.max(1, ...vals.filter((v) => v !== null));
     const cat = catOf(a.app);
     const color = catColor(cat);
     const device = nameCount.get(appName(a.app)) > 1 ? [...a.devs].map((dev) => DATA.devices[dev]).join(" and ") + " · " : "";
+    const share = Math.round((a.secs / whole) * 100);
     const perHour = hours.get(a.app).map((secs) => secs / Math.max(1, days.length));
     const hourTop = Math.max(1, ...perHour);
     const dayBars = perHour.map((v, h) => '<span data-tip="' + esc(appName(a.app) + "\n" + hourName(h) + ": " + fmt(v) + " on an average day") + '">' +
       (v ? '<span style="height:' + Math.max(6, (v / hourTop) * 100).toFixed(1) + "%;background:" + color + '"></span>' : "") + "</span>").join("");
-    const bars = vals.map((v, i) => '<span class="week-bar" data-tip="' + esc(appName(a.app) + "\n" + rangeText(weeks[i].from, weeks[i].to) + ": " + (v === null ? "no data" : fmt(v) + " daily average")) + '">' +
-      (v ? '<span style="height:' + Math.max(4, (v / top) * 100).toFixed(1) + "%;background:" + color + '"></span>' : "") + "</span>").join("");
     const catPart = cat === UNTRACKED_KEY
       ? esc(catName(cat))
       : '<a class="cat-name" href="' + categoryLink(cat) + '" data-tip="' + esc(catName(cat) + "\nClick to open it on the Apps page") + '">' + esc(catName(cat)) + "</a>";
@@ -699,8 +743,8 @@ function renderTopApps() {
       '<a class="app-name" href="' + appLink(a.app) + '" data-tip="' + esc(appName(a.app) + "\n" + fmt(a.secs) + " daily average\nClick to open it on the Apps page") + '">' + esc(appName(a.app)) + "</a>" +
       "<small>" + esc(device) + catPart + "</small></span>" +
       '<span class="list-time">' + fmt(a.secs) + "</span>" +
-      '<span class="day-bars">' + dayBars + "</span>" +
-      '<span class="week-bars">' + bars + "</span></div>";
+      '<span class="list-time share-pct" data-tip="' + esc(appName(a.app) + ": " + (share < 1 ? "under 1" : share) + "% of " + wholeName) + '">' + (share < 1 ? "<1" : share) + "%</span>" +
+      '<span class="day-bars">' + dayBars + "</span></div>";
   }).join("");
   el("trend-apps").innerHTML = head + rows +
     '<a class="more-link" href="/apps#' + new URLSearchParams({ range: "30", device: state.device }) + '">All apps on the Apps page ›</a>';
@@ -914,7 +958,7 @@ document.addEventListener("click", (e) => {
   const d = e.target.closest("[data-open-day]");
   if (d) update({ day: Number(d.dataset.openDay), period: "day" });
 });
-// The Day and Week cards on Today; Most used: Apps or Categories
+// The Day and Week cards on Today; the side list: Apps or Categories
 document.addEventListener("click", (e) => {
   const v = e.target.closest("[data-view]");
   if (v && PAGE === "today") return update({ period: v.dataset.view });

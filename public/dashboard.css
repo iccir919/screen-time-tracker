@@ -82,7 +82,7 @@ div.period-card:not(.chosen):hover { border-color: var(--card-line); }
 
 .two-col { display: flex; flex-wrap: wrap; gap: 20px; }
 .two-col > .card { flex: 1 1 420px; }
-/* Today: the day's charts on the left, Most used beside them (below on a phone) */
+/* Today: the day's charts on the left, Used today beside them (below on a phone) */
 .side-layout { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(300px, 1fr); gap: 22px; align-items: start; }
 .side-main { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
 .side-panel { min-width: 0; }
@@ -113,6 +113,11 @@ div.period-card:not(.chosen):hover { border-color: var(--card-line); }
 .hour-bar .stack { display: flex; flex-direction: column-reverse; border-radius: 3px 3px 0 0; overflow: hidden; }
 .hour-bar .stack span { display: block; flex: none; }
 .hour-bar:hover .stack { filter: brightness(0.9); }
+/* Today: minutes per hour above the timeline, in line with its lanes */
+.lane-hours { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 14px; align-items: end; margin-bottom: 12px; }
+.lane-hours .hour-bars { height: 90px; gap: 2px; }
+.lane-hours .stack span { cursor: pointer; }
+.lane-hours .stack span.rest { background: var(--track); cursor: default; }
 
 /* most used: a thin bar of the categories, then a row per app or category */
 /* on Today the days' bars have a row of their own, so they need their own height */
@@ -134,11 +139,12 @@ body[data-page="today"] #bars .bar-plot { height: 220px; flex: none; }
 .list-bar span { display: block; height: 100%; border-radius: 999px; }
 .list-time { text-align: right; font-weight: 600; }
 .list-more { margin: 10px 0 0; }
-.trend-app { display: grid; grid-template-columns: minmax(160px, 0.9fr) 100px minmax(0, 1.7fr) minmax(0, 1.1fr); gap: 32px; align-items: center;
+.trend-app { display: grid; grid-template-columns: minmax(160px, 1fr) 100px 60px minmax(0, 2.2fr); gap: 32px; align-items: center;
   padding: 11px 0; border-bottom: 1px solid var(--line); }
 .trend-app.head { padding: 0 0 4px; font-size: 12px; color: var(--muted); }
 .trend-app .app-name { font-weight: 600; color: inherit; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trend-app .cat-name { color: inherit; text-decoration: none; }
+.trend-app .share-pct { color: var(--muted); }
 .trend-app .app-name:hover, .trend-app .cat-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 /* top apps: a small average day, one bar per hour */
 .day-bars { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 2px; height: 32px; align-items: end; border-bottom: 1px solid var(--line); }
@@ -147,15 +153,8 @@ body[data-page="today"] #bars .bar-plot { height: 220px; flex: none; }
 .day-bars > span:hover > span { filter: brightness(0.88); }
 .day-ticks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); white-space: nowrap; }
 .day-ticks span:not(:first-child) { transform: translateX(-50%); }
-/* top apps: four weekly bars, labeled by the week's first day */
-.week-labels, .week-bars { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.week-labels span { text-align: center; }
 .trend-app.head .list-time { white-space: nowrap; }
 .trend-app .list-time { text-align: right; }
-.week-bars { height: 32px; align-items: end; }
-.week-bar { height: 100%; display: flex; align-items: flex-end; justify-content: center; }
-.week-bar span { width: 100%; max-width: 56px; border-radius: 3px 3px 0 0; }
-.week-bar:hover span { filter: brightness(0.88); }
 button.more-link { font: inherit; background: none; border: 0; padding: 0; cursor: pointer; margin-right: 16px; }
 
 /* the timeline with something highlighted: its blocks stay bright, the rest fade */
@@ -187,15 +186,14 @@ button.more-link { font: inherit; background: none; border: 0; padding: 0; curso
   .legend { margin-top: -4px; gap: 6px 14px; }
   .lane-track { height: 44px; }
   body[data-page="today"] #bars .bar-plot { height: 170px; }
-  .trend-app { grid-template-columns: minmax(0, 1fr) 80px; gap: 2px 8px; }
+  .trend-app { grid-template-columns: minmax(0, 1fr) 70px 44px; gap: 2px 8px; }
   .trend-app .day-bars, .trend-app.head .day-ticks { grid-column: 1 / -1; }
-  .trend-app .week-bars, .trend-app .week-labels { display: none; }
   .bar-labels:not(.week-labels) { gap: 4px; }
   .bar-plot { min-height: 150px; }
   .legend-item { font-size: 13px; padding: 5px 11px; }
   /* 8 days are narrow: let "7h 50m" wrap onto two lines */
   #bars .bar-labels .time { white-space: normal; text-align: center; line-height: 1.2; }
-  .lane, .hours { grid-template-columns: 52px minmax(0, 1fr); gap: 8px; }
+  .lane, .hours, .lane-hours { grid-template-columns: 52px minmax(0, 1fr); gap: 8px; }
   .hours.bare { grid-template-columns: minmax(0, 1fr); }
   .hour-bars { gap: 1px; }
   .hour-bars.tall { height: 200px; }

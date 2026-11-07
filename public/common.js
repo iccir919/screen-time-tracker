@@ -1,6 +1,6 @@
 // public/common.js
 //
-// Small pieces shared by the Today and Apps pages: loading the data,
+// Small pieces shared by all the pages: loading the data,
 // formatting times and dates, and the hover details.
 //
 // Times in the data are seconds in your local time zone (shifted so that
