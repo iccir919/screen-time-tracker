@@ -270,8 +270,47 @@ export function addToHours(sums, weekday, start, end) {
 
 const tip = document.getElementById("tip");
 
+// The first line of data-tip is the title and the rest are details.
+// data-tip-color puts a color swatch by the title; data-tip-rows (JSON, a
+// list of [color, label, value, current]) adds a small table under it, with
+// the current row marked.
 function showTip(el, x, y) {
-  tip.textContent = el.dataset.tip;
+  const [title, ...lines] = el.dataset.tip.split("\n");
+  const head = document.createElement("div");
+  head.className = "tip-title";
+  if (el.dataset.tipColor) {
+    const sw = document.createElement("span");
+    sw.className = "tip-swatch";
+    sw.style.background = el.dataset.tipColor;
+    head.append(sw);
+  }
+  head.append(title);
+  const parts = [head];
+  for (const line of lines) {
+    const d = document.createElement("div");
+    d.className = "tip-line";
+    d.textContent = line;
+    parts.push(d);
+  }
+  if (el.dataset.tipRows) {
+    const table = document.createElement("div");
+    table.className = "tip-rows";
+    for (const [color, label, value, current] of JSON.parse(el.dataset.tipRows)) {
+      const row = document.createElement("div");
+      row.className = "tip-row" + (current ? " current" : "");
+      const sw = document.createElement("span");
+      sw.className = "tip-swatch";
+      if (color) sw.style.background = color;
+      const name = document.createElement("span");
+      name.textContent = label;
+      const val = document.createElement("span");
+      val.textContent = value;
+      row.append(sw, name, val);
+      table.append(row);
+    }
+    parts.push(table);
+  }
+  tip.replaceChildren(...parts);
   tip.hidden = false;
   const pad = 12, w = tip.offsetWidth, h = tip.offsetHeight;
   let left = x + pad, top = y + pad;

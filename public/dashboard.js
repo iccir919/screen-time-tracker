@@ -294,18 +294,36 @@ function dayName(day, long) {
 const shortDate = (d) => fmtDate(d, { weekday: "short", month: "short", day: "numeric" });
 
 // Pieces of a bar, one per category, in category order. "flex" for a
-// horizontal share bar, "height" for a vertical stacked bar.
-function stackedParts(totals, sum, mode) {
+// horizontal share bar, "height" for a vertical stacked bar. With a title,
+// hovering a piece shows the bar's categories (title and line on top) with
+// that piece's category marked, and fades the other categories in the chart.
+// click: "pick" makes a click highlight the category (Today), "toggle"
+// spotlights it (Trends).
+function stackedParts(totals, sum, mode, title = "", line = "", click = "") {
   return CAT_KEYS.filter((key) => (totals.get(key) ?? 0) > 0).map((key) => {
     const share = (totals.get(key) / (sum || 1)) * 100;
     const size = mode === "flex" ? "flex:" + share.toFixed(3) + " 1 0" : "height:" + share.toFixed(3) + "%";
-    return '<span style="' + size + ";background:" + catColor(key) + '"></span>';
+    const tip = title ? ' data-tip="' + esc(title + "\n" + line) + '" data-tip-rows="' + categoryRows(totals, key) + '"' : "";
+    const act = click === "pick" ? ' data-pick-cat="' + esc(String(key)) + '"' : click === "toggle" ? ' data-toggle="' + esc(String(key)) + '"' : "";
+    return '<span data-cat="' + esc(String(key)) + '"' + act + ' style="' + size + ";background:" + catColor(key) + '"' + tip + "></span>";
   }).join("");
 }
 
-// "Social 1h 10m" lines, largest first, for hover details
-const categoryLines = (totals, min = 0) =>
-  [...totals].sort((a, b) => b[1] - a[1]).filter(([, s]) => s >= min).map(([key, s]) => catName(key) + " " + fmt(s));
+// The attribute that picks what's highlighted now (so clicking it again clears it)
+const focusPickAttr = () => (state.focus.app !== undefined
+  ? 'data-pick-app="' + esc(appKey(state.focus.app)) + '"'
+  : 'data-pick-cat="' + esc(String(state.focus.cat)) + '"');
+
+// Hover rows for categories (see showTip in common.js): largest first, up to
+// 8 and then "N more", with current (a category key) marked. Ready to put in
+// a data-tip-rows attribute.
+function categoryRows(totals, current = null) {
+  const ranked = [...totals].filter(([, secs]) => secs > 0).sort((a, b) => b[1] - a[1]);
+  const rows = ranked.slice(0, 8).map(([key, secs]) => [catColor(key), catName(key), fmt(secs), key === current ? 1 : 0]);
+  const rest = ranked.slice(8);
+  if (rest.length) rows.push(["", rest.length + " more", fmt(rest.reduce((x, [, secs]) => x + secs, 0)), rest.some(([key]) => key === current) ? 1 : 0]);
+  return esc(JSON.stringify(rows));
+}
 
 // ---------- the top: date or range, switches, the three cards ----------
 
@@ -338,8 +356,8 @@ function card({ tag = "div", href = "", attrs = "", pressed = false, label, smal
     (tag === "button" ? ' type="button"' : "") + (attrs ? " " + attrs : "") + ">" +
     '<span class="label"><span>' + esc(label) + "</span><small>" + esc(small) + "</small></span>" +
     '<span class="value' + (value === null ? " none" : text ? " text" : "") + '">' + (value === null ? "No data" : text ? esc(value) : value) + "</span>" +
-    '<span class="share"' + (sum ? ' data-tip="' + esc(categoryLines(cats).join("\n")) + '"' : "") + ">" +
-    (sum ? stackedParts(cats, sum, "flex") : "") + "</span>" +
+    '<span class="share"' + (sum ? ' data-tip="' + esc(label + "\n" + fmt(sum) + " in all") + '" data-tip-rows="' + categoryRows(cats) + '"' : "") + ">" +
+    (sum ? stackedParts(cats, sum, "flex", label, fmt(sum) + " in all") : "") + "</span>" +
     '<span class="split">' + esc(bottom) + "</span></" + tag + ">";
 }
 
@@ -443,7 +461,7 @@ function renderTimeline() {
   const hint = el("timeline-hint");
   const box = el("timeline");
   const ticks = "<div><span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>12a</span></div>";
-  const axis = '<div class="hours"><span></span>' + ticks + "</div>";
+  const axis = '<div class="hours bare">' + ticks + "</div>";
 
   if (PAGE === "today") {
     hint.textContent = "";
@@ -456,22 +474,24 @@ function renderTimeline() {
       const sessions = (e?.sessions ?? []).filter((x) => laneDevs.includes(x[0]));
       const gaps = (e?.gaps ?? []).filter((g) => laneDevs.includes(g[0]));
       const label = '<span class="lane-name"' + nameAttrs + ">" + esc(name) + "</span>";
-      if (!sessions.length && !gaps.length) return '<div class="lane' + cls + '">' + label + '<div class="lane-track no-data">No data</div></div>';
+      if (!sessions.length && !gaps.length) return '<div class="lane' + cls + '"><div class="lane-track no-data">No data</div>' + label + "</div>";
       const where = (dev) => (laneDevs.length > 1 ? " · " + DATA.devices[dev] : "");
+      const pickAttr = (app) => (app === UNTRACKED ? 'data-pick-cat="' + esc(String(UNTRACKED_KEY)) + '"'
+        : state.list === "cats" ? 'data-pick-cat="' + esc(String(catOf(app))) + '"' : 'data-pick-app="' + esc(appKey(app)) + '"');
       const blocks = sessions.map(([dev, app, from, to, active]) =>
-        '<div class="block' + (state.focus ? (matches(app) ? " on" : " dim") : "") + '" ' +
-        (state.list === "cats" ? 'data-pick-cat="' + esc(String(catOf(app))) + '"' : 'data-pick-app="' + esc(appKey(app)) + '"') + ' style="' + pos(from, to) + ";background:" + catColor(catOf(app)) + '" data-tip="' +
-        esc(appName(app) + " · " + catName(catOf(app)) + where(dev) + "\n" + fmtClock(from) + " to " + fmtClock(to) + " · " + fmt(active)) + '"></div>');
+        '<div class="block' + (state.focus ? (matches(app) ? " on" : " dim") : "") + '" ' + pickAttr(app) +
+        ' style="' + pos(from, to) + ";background:" + catColor(catOf(app)) + '" data-tip-color="' + esc(catColor(catOf(app))) + '" data-tip="' +
+        esc(appName(app) + "\n" + catName(catOf(app)) + where(dev) + "\n" + fmtClock(from) + " to " + fmtClock(to) + " · " + fmt(active)) + '"></div>');
       const gapBlocks = gaps.map(([dev, from, to, last]) => {
         const before = last.length ? "\nLast opened: " + last.map(([app, at]) => appName(app) + " at " + fmtClock(at)).join(", ") : "";
         return '<div class="block gap' + (state.focus ? (matches(UNTRACKED) ? " on" : " dim") : "") + '" data-pick-cat="' + esc(String(UNTRACKED_KEY)) + '" style="' + pos(from, to) + '" data-tip="' +
-          esc("Screen on, no app recorded" + where(dev) + "\n" + fmtClock(from) + " to " + fmtClock(to) + " · " + fmt(to - from) + before) + '"></div>';
+          esc("Screen on, no app recorded\n" + (where(dev) ? DATA.devices[dev] + "\n" : "") + fmtClock(from) + " to " + fmtClock(to) + " · " + fmt(to - from) + before) + '"></div>';
       });
-      return '<div class="lane' + cls + '">' + label + '<div class="lane-track">' + blocks.join("") + gapBlocks.join("") + "</div></div>";
+      return '<div class="lane' + cls + '"><div class="lane-track">' + blocks.join("") + gapBlocks.join("") + "</div>" + label + "</div>";
     };
     if (state.period === "day") {
       title.textContent = "Through the day";
-      box.innerHTML = todayHours([state.day]) + devs.map((dev) => lane(DATA.devices[dev], state.day, [dev])).join("") + axis;
+      box.innerHTML = todayHours([state.day]) + axis + devs.map((dev) => lane(DATA.devices[dev], state.day, [dev])).join("");
       return;
     }
     // The Week view: one row per day (the devices together); a day's name opens it
@@ -482,7 +502,7 @@ function renderTimeline() {
     for (let d = from; d <= to; d++) {
       rows.push(lane(fmtDate(d, { weekday: "short" }), d, devs, " week", ' role="button" tabindex="0" data-open-day="' + d + '" data-tip="' + esc(shortDate(d) + "\nClick to see this day") + '"'));
     }
-    box.innerHTML = todayHours(periodDays(state.period)) + rows.join("") + axis;
+    box.innerHTML = todayHours(periodDays(state.period)) + axis + rows.join("");
     return;
   }
 
@@ -502,7 +522,7 @@ function renderTimeline() {
       const cats = shownCats(categoryTotals(ds)); // already a daily average
       const sum = [...cats.values()].reduce((x, y) => x + y, 0);
       return {
-        label: WEEKDAYS[w].slice(0, 3), cats, total: ds.length ? sum : null,
+        label: WEEKDAYS[w].slice(0, 3), title: WEEKDAYS[w] + "s", cats, total: ds.length ? sum : null,
       };
     })) : '<p class="hint">No data in this period.</p>';
     return;
@@ -516,7 +536,8 @@ function renderTimeline() {
       const cats = shownCats(categoryTotals(w.days));
       const sum = [...cats.values()].reduce((x, y) => x + y, 0);
       return {
-        label: w.current ? "This week" : fmtDate(w.from, { month: "short", day: "numeric" }), cats, total: w.days.length ? sum : null,
+        label: w.current ? "This week" : fmtDate(w.from, { month: "short", day: "numeric" }),
+        title: w.current ? "This week" : "Week of " + fmtDate(w.from, { month: "short", day: "numeric" }), cats, total: w.days.length ? sum : null,
         faded: w.current,
       };
     }), { avg, avgText: "6-week average" });
@@ -549,9 +570,9 @@ function renderTimeline() {
   const max = Math.max(state.only.size ? 1 : 60, ...perHour.map(hourSum)) * 1.04;
   const bars = perHour.map((h, i) => {
     const sum = hourSum(h);
-    const tip = [hourName(i) + ": " + fmt(sum)].concat(categoryLines(h, 30)).join("\n");
-    return '<div class="hour-bar" data-tip="' + esc(tip) + '"><div class="stack" style="height:' + ((sum / max) * 100).toFixed(2) + '%">' +
-      stackedLinks(h, sum, "height", hourName(i)) + "</div></div>";
+    const title = hourName(i) + " to " + hourName((i + 1) % 24) + ", an average day";
+    return '<div class="hour-bar" data-tip="' + esc(title + "\n" + fmt(sum) + " in all") + '"' + (sum ? ' data-tip-rows="' + categoryRows(h) + '"' : "") + '>' +
+      '<div class="stack" style="height:' + ((sum / max) * 100).toFixed(2) + '%">' + stackedLinks(h, sum, "height", title, fmt(sum) + " in all") + "</div></div>";
   });
   box.innerHTML = days.length
     ? '<div class="hour-bars tall">' + bars.join("") + '</div><div class="hours bare">' + ticks + "</div>"
@@ -560,15 +581,22 @@ function renderTimeline() {
 
 // Today: minutes in each hour above the timeline, lined up with its lanes.
 // The day's own hours in the Day view, an average day in the Week view.
-// Each bar is split by category, and clicking a piece highlights that
-// category. With something highlighted, a bar shows just its part of the
-// hour, with the rest of the hour faded behind it.
+// Each bar is split by app (or by category when the side list shows
+// categories), the same way the timeline's blocks are, so hovering a piece
+// lights up the same thing in both, and clicking it highlights it. With
+// something highlighted, a bar shows just its part of the hour, with the
+// rest of the hour faded behind it.
 function todayHours(days) {
+  const byCat = state.list === "cats";
+  // What a piece of time belongs to: an app, a category, or Untracked
+  const keyOf = (app) => (app === UNTRACKED ? "u" : byCat ? "c" + catOf(app) : "a" + app);
   const perHour = Array.from({ length: 24 }, () => new Map());
   const picked = new Array(24).fill(0);
+  const sample = new Map(); // a key's app, to get its name, color and category
   for (const d of days) {
     for (const [, app, start, end] of items(d)) {
-      const key = catOf(app);
+      const key = keyOf(app);
+      if (!sample.has(key)) sample.set(key, app);
       const hit = state.focus && matches(app);
       for (let t = start; t < end;) {
         const upTo = Math.min(end, (Math.floor(t / 3600) + 1) * 3600);
@@ -583,37 +611,56 @@ function todayHours(days) {
   for (const h of perHour) for (const [key, secs] of h) h.set(key, secs / n);
   const hourSum = (h) => [...h.values()].reduce((x, y) => x + y, 0);
   const max = Math.max(600, ...perHour.map(hourSum)) * 1.04;
-  const avg = days.length > 1 ? " on an average day" : "";
+  const catKey = (key) => (key === "u" ? UNTRACKED_KEY : catOf(sample.get(key)));
+  const label = (key) => (key === "u" ? catName(UNTRACKED_KEY) : byCat ? catName(catKey(key)) : appName(sample.get(key)));
+  const pick = (key) => (key === "u" ? 'data-pick-cat="' + esc(String(UNTRACKED_KEY)) + '"'
+    : byCat ? 'data-pick-cat="' + esc(String(catKey(key))) + '"' : 'data-pick-app="' + esc(appKey(sample.get(key))) + '"');
+  const avg = days.length > 1 ? ", an average day" : "";
+  // Pieces in category order, so an app sits next to the others in its category
+  const order = (h) => [...h.keys()].sort((a, b) => CAT_KEYS.indexOf(catKey(a)) - CAT_KEYS.indexOf(catKey(b)) || h.get(b) - h.get(a));
   const bars = perHour.map((h, i) => {
     const sum = hourSum(h);
+    const title = hourName(i) + " to " + hourName((i + 1) % 24) + avg;
+    // The hover rows: the biggest first, with the hovered one marked
+    const ranked = [...h.keys()].sort((a, b) => h.get(b) - h.get(a));
+    const tipRows = (current) => {
+      const rows = ranked.slice(0, 8).map((key) => [catColor(catKey(key)), label(key), fmt(h.get(key)), key === current ? 1 : 0]);
+      const rest = ranked.slice(8);
+      if (rest.length) rows.push(["", rest.length + " more", fmt(rest.reduce((x, key) => x + h.get(key), 0)), rest.includes(current) ? 1 : 0]);
+      return esc(JSON.stringify(rows));
+    };
     let pieces;
-    let tip;
+    let barTip;
     if (state.focus) {
       const mine = picked[i] / n;
-      tip = hourName(i) + avg + ": " + fmt(mine) + " of " + focusName() + (sum ? " (" + fmt(sum) + " in all)" : "");
-      pieces = (mine ? '<span style="height:' + ((mine / (sum || 1)) * 100).toFixed(3) + "%;background:" + focusColor() + '"></span>' : "") +
+      barTip = title + "\n" + fmt(mine) + " of " + focusName() + (sum ? "\n" + fmt(sum) + " in all" : "");
+      pieces = (mine ? '<span class="mine" style="height:' + ((mine / (sum || 1)) * 100).toFixed(3) + "%;background:" + focusColor() + '"></span>' : "") +
         (sum - mine > 0 ? '<span class="rest" style="height:' + (((sum - mine) / (sum || 1)) * 100).toFixed(3) + '%"></span>' : "");
     } else {
-      tip = [hourName(i) + avg + ": " + fmt(sum)].concat(categoryLines(h, 30)).join("\n");
-      pieces = CAT_KEYS.filter((key) => (h.get(key) ?? 0) > 0).map((key) =>
-        '<span data-pick-cat="' + esc(String(key)) + '" style="height:' + ((h.get(key) / (sum || 1)) * 100).toFixed(3) + "%;background:" + catColor(key) + '"></span>').join("");
+      barTip = title + "\n" + fmt(sum) + " in all";
+      pieces = order(h).map((key) =>
+        "<span " + pick(key) + ' style="height:' + ((h.get(key) / (sum || 1)) * 100).toFixed(3) + "%;background:" + catColor(catKey(key)) +
+        '" data-tip="' + esc(barTip) + '" data-tip-rows="' + tipRows(key) + '"></span>').join("");
     }
-    return '<div class="hour-bar" data-tip="' + esc(tip) + '"><div class="stack" style="height:' + ((sum / max) * 100).toFixed(2) + '%">' + pieces + "</div></div>";
+    return '<div class="hour-bar" data-tip="' + esc(barTip) + '"' + (state.focus || !sum ? "" : ' data-tip-rows="' + tipRows(null) + '"') + '>' +
+      '<div class="stack" style="height:' + ((sum / max) * 100).toFixed(2) + '%">' + pieces + "</div></div>";
   });
-  return '<div class="lane-hours"><span class="lane-name">' + (days.length > 1 ? "Avg" : "Hours") + '</span><div class="hour-bars">' + bars.join("") + "</div></div>";
+  return '<div class="lane-hours"><div class="hour-bars">' + bars.join("") + "</div></div>";
 }
 
 // Pieces of a bar, one per category, each opening that category on the Apps
-// page (Untracked has no page, so it's a plain piece). label goes in front
-// of the hover text, like "Mon" or "9a".
-function stackedLinks(totals, sum, mode, label) {
+// page (Untracked has no page, so it's a plain piece). Hovering a piece shows
+// the whole bar's categories (title and line on top, like "Mon" and "3h in
+// all") with that piece's category marked.
+function stackedLinks(totals, sum, mode, title, line) {
   return CAT_KEYS.filter((key) => (totals.get(key) ?? 0) > 0).map((key) => {
     const share = (totals.get(key) / (sum || 1)) * 100;
     const size = mode === "flex" ? "flex:" + share.toFixed(3) + " 1 0" : "height:" + share.toFixed(3) + "%";
-    const tip = label + " · " + catName(key) + ": " + fmt(totals.get(key)) + (key === UNTRACKED_KEY ? "" : "\nClick to open it on the Apps page");
+    const tip = ' data-tip="' + esc(title + "\n" + line + (key === UNTRACKED_KEY ? "" : "\nClick to open " + catName(key) + " on the Apps page")) + '" data-tip-rows="' + categoryRows(totals, key) + '"';
+    const cat = ' data-cat="' + esc(String(key)) + '"';
     return key === UNTRACKED_KEY
-      ? '<span style="' + size + ";background:" + catColor(key) + '" data-tip="' + esc(tip) + '"></span>'
-      : '<a href="' + categoryLink(key) + '" style="' + size + ";background:" + catColor(key) + '" data-tip="' + esc(tip) + '"></a>';
+      ? "<span" + cat + ' style="' + size + ";background:" + catColor(key) + '"' + tip + "></span>"
+      : '<a href="' + categoryLink(key) + '"' + cat + ' style="' + size + ";background:" + catColor(key) + '"' + tip + "></a>";
   }).join("");
 }
 
@@ -627,7 +674,7 @@ function rowBars(rows, { avg = null, avgText = "" } = {}) {
     '<div class="prows">' + rows.map((r) =>
       '<div class="prow"><span class="prow-name">' + esc(r.label) + "</span>" +
       '<span class="prow-track">' +
-      (r.total ? '<span class="prow-bar' + (r.faded ? " faded" : "") + '" style="width:' + pct(r.total) + '">' + stackedLinks(r.cats, r.total, "flex", r.label) + "</span>" : "") +
+      (r.total ? '<span class="prow-bar' + (r.faded ? " faded" : "") + '" style="width:' + pct(r.total) + '">' + stackedLinks(r.cats, r.total, "flex", r.title ?? r.label, fmt(r.total) + " daily average" + (r.faded ? " so far" : "")) + "</span>" : "") +
       (avg === null ? "" : '<span class="prow-avg" style="left:' + pct(avg) + '"></span>') + "</span>" +
       '<span class="prow-time">' + (r.total === null ? "–" : fmt(r.total)) + (r.faded ? "<small>so far</small>" : "") + "</span></div>").join("") + "</div>";
 }
@@ -661,7 +708,8 @@ function renderLists() {
   }
   for (const m of [apps, cats]) for (const [k, v] of m) m.set(k, v / days.length);
   const catSum = [...cats.values()].reduce((x, y) => x + y, 0);
-  const share = '<span class="share list-share" data-tip="' + esc(categoryLines(cats, 60).join("\n")) + '">' + stackedParts(cats, catSum, "flex") + "</span>";
+  const shareTitle = el("list-title").textContent, shareLine = fmt(catSum) + (isDay ? " in all" : " daily average");
+  const share = '<span class="share list-share" data-tip="' + esc(shareTitle + "\n" + shareLine) + '" data-tip-rows="' + categoryRows(cats) + '">' + stackedParts(cats, catSum, "flex", shareTitle, shareLine) + "</span>";
   const f = state.focus;
   const row = (attr, on, name, sub, secs, key) =>
     '<button class="list-row' + (on ? " on" : "") + '" ' + attr + (on ? ' style="--tint:' + solidColor(key) + '"' : "") + ">" +
@@ -733,12 +781,12 @@ function renderTopApps() {
     const share = Math.round((a.secs / whole) * 100);
     const perHour = hours.get(a.app).map((secs) => secs / Math.max(1, days.length));
     const hourTop = Math.max(1, ...perHour);
-    const dayBars = perHour.map((v, h) => '<span data-tip="' + esc(appName(a.app) + "\n" + hourName(h) + ": " + fmt(v) + " on an average day") + '">' +
+    const dayBars = perHour.map((v, h) => '<span data-tip-color="' + esc(color) + '" data-tip="' + esc(appName(a.app) + "\n" + hourName(h) + " to " + hourName((h + 1) % 24) + "\n" + fmt(v) + " on an average day") + '">' +
       (v ? '<span style="height:' + Math.max(6, (v / hourTop) * 100).toFixed(1) + "%;background:" + color + '"></span>' : "") + "</span>").join("");
     const catPart = cat === UNTRACKED_KEY
       ? esc(catName(cat))
       : '<a class="cat-name" href="' + categoryLink(cat) + '" data-tip="' + esc(catName(cat) + "\nClick to open it on the Apps page") + '">' + esc(catName(cat)) + "</a>";
-    return '<div class="trend-app">' +
+    return '<div class="trend-app" data-href="' + appLink(a.app) + '">' +
       '<span class="list-name"><span class="swatch" style="background:' + color + '"></span>' +
       '<a class="app-name" href="' + appLink(a.app) + '" data-tip="' + esc(appName(a.app) + "\n" + fmt(a.secs) + " daily average\nClick to open it on the Apps page") + '">' + esc(appName(a.app)) + "</a>" +
       "<small>" + esc(device) + catPart + "</small></span>" +
@@ -765,7 +813,7 @@ function renderBars() {
     ? (state.day === todayIdx ? "Last 8 days" : "8 days to " + fmtDate(state.day, { month: "short", day: "numeric" }))
     : PAGE === "today" ? (win.to === todayIdx - 1 ? "Last 7 days" : "7 days to " + fmtDate(win.to, { month: "short", day: "numeric" })) : "Day by day";
   el("bars-hint").innerHTML = isDay
-    ? "Click a day to see it"
+    ? "Click a color to highlight it, or a day's name to see it"
     :
       '<span class="avg-key"></span>' + n + "-day average" + (state.focus ? " of " + esc(focusName()) : "") + " " + (avg === null ? "–" : "<b>" + fmt(avg) + "</b>");
 
@@ -783,23 +831,34 @@ function renderBars() {
     const cats = categoryTotals([d]);
     shownCats(cats);
     const label = shortDate(d);
-    const tip = [label + ": " + (has ? (state.focus ? focusName() + " " : "") + fmt(t) : "no data")]
-      .concat(state.focus && has ? ["All apps " + fmt(total(d))] : [])
-      .concat(partial ? ["Missing data from a device"] : [], state.focus ? [] : categoryLines(cats, 60).slice(0, 5), [isDay ? "Click to see this day" : "Click to see it in Today"]).join("\n");
+    const tip = [fmtDate(d, { weekday: "long", month: "short", day: "numeric" }), has ? fmt(t) + (state.focus ? " of " + focusName() : " in all") : "No data"]
+      .concat(state.focus && has ? [fmt(total(d)) + " in all"] : [])
+      .concat(partial ? ["Missing data from a device"] : []).join("\n");
+    // Clicking a piece highlights its category (Today) or spotlights it
+    // (Trends); a day opens from its name under the bars
+    const clickLine = PAGE === "today" ? (state.focus ? "Click to clear the highlight" : "Click a color to highlight it") : "Click a color to spotlight it";
+    const rows = has && !state.focus ? ' data-tip-rows="' + categoryRows(cats) + '"' : "";
     // On Today, the other days are faded; on Trends, all are in full color
     const cls = "stack" + (isDay && d !== state.day ? " faded" : "") + (partial ? " partial" : "");
-    return '<button class="bar-col" data-day="' + d + '" data-tip="' + esc(tip) + '" aria-label="' + esc(label + ": " + (has ? fmt(t) : "no data")) + '">' +
-      (has && t > 0 ? '<span class="' + cls + '" style="height:' + ((t / top) * 100).toFixed(1) + '%">' +
-        (state.focus ? '<span style="height:100%;background:' + focusColor() + '"></span>' : stackedParts(cats, t, "height")) + "</span>"
-        : '<span class="stack none"></span>') + "</button>";
+    const [tipTitle, ...tipLines] = tip.split("\n");
+    const pieces = state.focus
+      ? '<span ' + focusPickAttr() + ' data-tip="' + esc(tip + "\n" + clickLine) + '" style="height:100%;background:' + focusColor() + '"></span>'
+      : stackedParts(cats, t, "height", tipTitle, tipLines.concat(clickLine).join("\n"), PAGE === "today" ? "pick" : "toggle");
+    return '<div class="bar-col pickable" data-tip="' + esc(tip) + '"' + rows + ' role="img" aria-label="' + esc(label + ": " + (has ? fmt(t) : "no data")) + '">' +
+      (has && t > 0 ? '<span class="' + cls + '" style="height:' + ((t / top) * 100).toFixed(1) + '%">' + pieces + "</span>"
+        : '<span class="stack none"></span>') + "</div>";
   });
   const labels = days.map((d, i) => {
     const on = isDay && d === state.day;
     let text = d === todayIdx ? "Today" : fmtDate(d, { weekday: "short" });
     if (isDay && d === state.day - 7) text = "Last " + text;
     if (many) text = (days.length - 1 - i) % 7 === 0 ? fmtDate(d, { month: "short", day: "numeric" }) : "";
-    return '<div><span class="label' + (on ? " on" : "") + '">' + esc(text) + "</span>" +
-      (many ? "" : '<span class="time">' + (anyData(d) ? fmt(pickTotal(d)) : "–") + "</span>") + "</div>";
+    const inner = '<span class="label' + (on ? " on" : "") + '">' + esc(text) + "</span>" +
+      (many ? "" : '<span class="time">' + (anyData(d) ? fmt(pickTotal(d)) : "–") + "</span>");
+    // A day's name opens it: on Today right here, on Trends in Today
+    if (!text) return "<div></div>";
+    const tipText = shortDate(d) + "\n" + (PAGE === "today" ? "Click to see this day" : "Click to open it in Today");
+    return '<div><button class="day-link" data-day="' + d + '" data-tip="' + esc(tipText) + '">' + inner + "</button></div>";
   });
   el("bars").innerHTML =
     '<div class="bar-plot' + (many ? " many" : "") + '">' +
@@ -907,6 +966,7 @@ function renderRunning() {
 
 function update(changes) {
   Object.assign(state, changes);
+  hot = "";
   state.day = clampDay(state.day);
   hideTip();
   render();
@@ -946,12 +1006,54 @@ document.addEventListener("click", (e) => {
   if (app === -1) return;
   update({ focus: f && f.app === app ? null : { cat: catOf(app), app } });
 });
-// Clearing the highlight on Today: Esc, or a click on an empty part of the timeline
+// Clearing the highlight on Today: Esc, or a click anywhere that isn't
+// something to pick or a control (an empty part of a chart, a card's
+// background, a heading)
+const KEEPS_FOCUS = "[data-pick-cat], [data-pick-app], [data-clear], [data-list], [data-view], [data-open-day], [data-day], button, a, input, select, label";
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && state.focus) update({ focus: null });
 });
 document.addEventListener("click", (e) => {
-  if (state.focus && e.target.classList.contains("lane-track")) update({ focus: null });
+  if (PAGE === "today" && state.focus && !e.target.closest(KEEPS_FOCUS)) update({ focus: null });
+});
+// Hovering an app or category on Today (a timeline block, a piece of an
+// hour, a row in the side list) lights up every place it appears, showing
+// what a click would highlight
+let hot = "";
+function setHot(attr) {
+  if (attr === hot) return;
+  hot = attr;
+  const layout = document.querySelector(".side-layout");
+  if (!layout) return;
+  for (const x of layout.querySelectorAll(".hot")) x.classList.remove("hot");
+  layout.classList.toggle("previewing", Boolean(attr));
+  if (attr) for (const x of layout.querySelectorAll("[" + attr + "]")) x.classList.add("hot");
+}
+document.addEventListener("mouseover", (e) => {
+  if (PAGE !== "today") return;
+  const t = e.target.closest(".side-layout [data-pick-app], .side-layout [data-pick-cat]");
+  if (!t) return setHot("");
+  setHot(t.dataset.pickApp !== undefined ? 'data-pick-app="' + CSS.escape(t.dataset.pickApp) + '"' : 'data-pick-cat="' + CSS.escape(t.dataset.pickCat) + '"');
+});
+document.addEventListener("mouseleave", () => setHot(""));
+// Hovering a category's piece in a chart made of category bars (the cards,
+// Used today's bar, the day bars, Trends' Patterns) fades the other
+// categories in that chart
+const CAT_CHARTS = "#period-cards, #bars, #top-apps, .pattern-box";
+let catHover = null; // [chart, key]
+document.addEventListener("mouseover", (e) => {
+  const piece = e.target.closest?.("[data-cat]");
+  const chart = piece?.closest(CAT_CHARTS);
+  const next = chart ? [chart, piece.dataset.cat] : null;
+  if (catHover && next && catHover[0] === next[0] && catHover[1] === next[1]) return;
+  if (catHover) {
+    catHover[0].classList.remove("cat-previewing");
+    for (const x of catHover[0].querySelectorAll("[data-cat].hot")) x.classList.remove("hot");
+  }
+  catHover = next;
+  if (!next) return;
+  chart.classList.add("cat-previewing");
+  for (const x of chart.querySelectorAll('[data-cat="' + CSS.escape(next[1]) + '"]')) x.classList.add("hot");
 });
 // A day's name in Today's Week view shows that day
 document.addEventListener("click", (e) => {
@@ -971,6 +1073,12 @@ on("bars", "click", (e) => {
   if (!target) return;
   if (PAGE === "today") update({ day: Number(target.dataset.day), period: "day" });
   else location.href = todayLink(Number(target.dataset.day));
+});
+// A row in Trends' Top apps opens its app, unless the click was on a link in it
+on("trend-apps", "click", (e) => {
+  if (e.target.closest("a")) return;
+  const row = e.target.closest("[data-href]");
+  if (row) location.href = row.dataset.href;
 });
 on("pattern-switch", "click", (e) => {
   const b = e.target.closest("[data-pattern]");

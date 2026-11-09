@@ -91,8 +91,8 @@ div.period-card:not(.chosen):hover { border-color: var(--card-line); }
 }
 
 /* timeline: the day */
-.lane { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 14px; align-items: center; margin-bottom: 10px; }
-.lane-name { font-size: 14px; font-weight: 600; color: var(--ink-2); }
+.lane { margin-bottom: 14px; }
+.lane-name { display: inline-block; margin-top: 2px; font-size: 12px; line-height: 1.3; font-weight: 600; color: var(--muted); }
 .lane-track { position: relative; height: 52px; background: var(--lane); border-radius: 10px; overflow: hidden; }
 .lane-track.no-data { background: transparent; border: 1.5px dashed var(--empty); display: flex; align-items: center;
   justify-content: center; font-size: 13px; color: var(--muted); }
@@ -114,10 +114,22 @@ div.period-card:not(.chosen):hover { border-color: var(--card-line); }
 .hour-bar .stack span { display: block; flex: none; }
 .hour-bar:hover .stack { filter: brightness(0.9); }
 /* Today: minutes per hour above the timeline, in line with its lanes */
-.lane-hours { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 14px; align-items: end; margin-bottom: 12px; }
-.lane-hours .hour-bars { height: 90px; gap: 2px; }
+.lane-hours { margin-bottom: 0; }
+.lane-hours + .hours { margin: 5px 0 12px; }
+.lane-hours .hour-bars { height: 110px; gap: 2px; }
+.lane-hours .stack { gap: 1px; }
 .lane-hours .stack span { cursor: pointer; }
 .lane-hours .stack span.rest { background: var(--track); cursor: default; }
+.hour-bar:hover .stack { filter: none; }
+/* hovering something to pick: everything else fades a little */
+.side-layout.previewing .lane-hours .stack span[data-pick-app]:not(.hot),
+.side-layout.previewing .lane-hours .stack span[data-pick-cat]:not(.hot),
+.side-layout.previewing .block:not(.hot) { opacity: 0.3; }
+.side-layout.previewing .block.dim:not(.hot) { opacity: 0.1; }
+.side-layout.previewing .block.hot, .side-layout.previewing .stack span.hot { opacity: 1; }
+/* hovering a category in a chart of category bars: the others fade */
+.cat-previewing [data-cat] { transition: opacity 0.12s; }
+.cat-previewing [data-cat]:not(.hot) { opacity: 0.25; }
 
 /* most used: a thin bar of the categories, then a row per app or category */
 /* on Today the days' bars have a row of their own, so they need their own height */
@@ -145,6 +157,15 @@ body[data-page="today"] #bars .bar-plot { height: 220px; flex: none; }
 .trend-app .app-name { font-weight: 600; color: inherit; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trend-app .cat-name { color: inherit; text-decoration: none; }
 .trend-app .share-pct { color: var(--muted); }
+.trend-app:not(.head) { cursor: pointer; }
+.trend-app:not(.head):hover { background: var(--lane); box-shadow: -10px 0 0 var(--lane), 10px 0 0 var(--lane); }
+/* the day bars: pieces pick a category; a day's name opens the day */
+.bar-col.pickable { cursor: default; }
+.bar-col.pickable .stack span { cursor: pointer; }
+.bar-col.pickable:hover .stack:not(.none) { filter: none; }
+.day-link { all: unset; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; border-radius: 6px; padding: 1px 4px; }
+.day-link:hover .label, .day-link:focus-visible .label { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.day-link:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .trend-app .app-name:hover, .trend-app .cat-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 /* top apps: a small average day, one bar per hour */
 .day-bars { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 2px; height: 32px; align-items: end; border-bottom: 1px solid var(--line); }
@@ -161,7 +182,7 @@ button.more-link { font: inherit; background: none; border: 0; padding: 0; curso
 .block.on { z-index: 1; }
 .lane-track .block { cursor: pointer; }
 /* the Week view: a thinner row per day, its name opens the day */
-.lane.week { margin-bottom: 5px; }
+.lane.week { margin-bottom: 12px; }
 .lane.week .lane-track { height: 30px; }
 .lane.week .lane-name { cursor: pointer; }
 .lane.week .lane-name:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
@@ -193,7 +214,6 @@ button.more-link { font: inherit; background: none; border: 0; padding: 0; curso
   .legend-item { font-size: 13px; padding: 5px 11px; }
   /* 8 days are narrow: let "7h 50m" wrap onto two lines */
   #bars .bar-labels .time { white-space: normal; text-align: center; line-height: 1.2; }
-  .lane, .hours, .lane-hours { grid-template-columns: 52px minmax(0, 1fr); gap: 8px; }
   .hours.bare { grid-template-columns: minmax(0, 1fr); }
   .hour-bars { gap: 1px; }
   .hour-bars.tall { height: 200px; }
