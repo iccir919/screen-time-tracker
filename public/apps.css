@@ -78,6 +78,9 @@
   display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .stat span { font-size: 13px; color: var(--muted); }
 .stat b { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; }
+/* Day by day in a category: a bar per day of the range */
+.day-by-day { margin-bottom: 20px; }
+.day-by-day .bar-plot { height: 200px; flex: none; }
 .detail-grid { display: flex; flex-wrap: wrap; gap: 20px; }
 .detail-grid > .card { flex: 1 1 420px; }
 .detail-grid .card { min-height: 330px; }

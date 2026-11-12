@@ -159,13 +159,9 @@ body[data-page="today"] #bars .bar-plot { height: 220px; flex: none; }
 .trend-app .share-pct { color: var(--muted); }
 .trend-app:not(.head) { cursor: pointer; }
 .trend-app:not(.head):hover { background: var(--lane); box-shadow: -10px 0 0 var(--lane), 10px 0 0 var(--lane); }
-/* the day bars: pieces pick a category; a day's name opens the day */
-.bar-col.pickable { cursor: default; }
-.bar-col.pickable .stack span { cursor: pointer; }
-.bar-col.pickable:hover .stack:not(.none) { filter: none; }
-.day-link { all: unset; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; border-radius: 6px; padding: 1px 4px; }
-.day-link:hover .label, .day-link:focus-visible .label { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
-.day-link:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+/* Patterns: pieces highlight their category */
+.pattern-box [data-toggle] { cursor: pointer; }
+.list-share [data-pick-cat] { cursor: pointer; }
 .trend-app .app-name:hover, .trend-app .cat-name:hover { text-decoration: underline; text-underline-offset: 3px; }
 /* top apps: a small average day, one bar per hour */
 .day-bars { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 2px; height: 32px; align-items: end; border-bottom: 1px solid var(--line); }

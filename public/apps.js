@@ -22,7 +22,7 @@
 
 import { setupRefresh, showLastArchived } from "./refresh.js";
 import {
-  DAY, loadUsage, esc, fmt, fmtDate, todayIdx, weekdayOf, hideTip, UNTRACKED_KEY, categoryKeys, categoryColor, categoryName,
+  DAY, loadUsage, esc, fmt, fmtDate, isoDay, todayIdx, weekdayOf, hideTip, UNTRACKED_KEY, categoryKeys, categoryColor, categoryName,
   weekLineHtml, weekdayHourHtml, addToHours, localNow, WEEKDAYS, fmtClock, STEPS, stepTotals, runningTotal, runningTotalHtml,
   weekdayBarsHtml,
 } from "./common.js";
@@ -439,6 +439,31 @@ function weekdayCard(trend, totals, color, name) {
     '<div class="weekdays">' + weekdayBarsHtml(days, { chosen: weekdayOf(todayIdx), hint: "last 6 weeks" }) + "</div></section>";
 }
 
+// A bar for each day of the chosen range, in the category's color. Clicking
+// a day opens it on Today with the category highlighted.
+function dayByDayCard(totals, color, key) {
+  const { start, end } = rangeBounds();
+  const days = [];
+  for (let d = start; d <= end; d++) days.push(d);
+  const devs = selectedDevices();
+  const top = Math.max(60, ...days.map((d) => totals.mine.get(d) ?? 0)) * 1.08;
+  const device = state.device === "all" ? "" : "&device=" + state.device;
+  const cols = days.map((d) => {
+    const has = devs.some((dev) => deviceDays[dev].has(d));
+    const t = totals.mine.get(d) ?? 0;
+    const tip = fmtDate(d, { weekday: "long", month: "short", day: "numeric" }) + "\n" +
+      (has ? fmt(t) + " of " + catName(key) : "No data") + "\nClick to see this day in Today";
+    return '<a class="bar-col" href="/#day=' + isoDay(d) + "&focus=" + encodeURIComponent("cat:" + String(key)) + device + '" data-tip="' + esc(tip) + '">' +
+      (has && t > 0 ? '<span class="stack" style="height:' + ((t / top) * 100).toFixed(1) + '%"><span style="height:100%;background:' + color + '"></span></span>'
+        : '<span class="stack none"></span>') + "</a>";
+  });
+  // Dates under every 7th day, counting back from the last
+  const labels = days.map((d, i) => '<div><span class="label">' +
+    ((days.length - 1 - i) % 7 === 0 ? esc(fmtDate(d, { month: "short", day: "numeric" })) : "") + "</span></div>");
+  return '<section class="card bars-card day-by-day"><div class="card-head"><h2>Day by day</h2><span class="hint">Click a day to see it</span></div>' +
+    '<div class="bar-plot many">' + cols.join("") + '</div><div class="bar-labels many">' + labels.join("") + "</div></section>";
+}
+
 // Today so far, added up through the day, against the same weekday last week
 // and the average for that weekday over the 6 weeks before
 function runCard(matches) {
@@ -583,12 +608,10 @@ function renderCategoryView(c, key) {
         '<span class="num">' + changeCell(r) + "</span></button>";
     }).join("") + "</div></section>" : "";
 
-  document.getElementById("detail-view").innerHTML = statCards(stats) + appList +
+  document.getElementById("detail-view").innerHTML = statCards(stats) + appList + dayByDayCard(totals, color, key) +
     '<div class="detail-grid">' + weekCard(trend, totals) + weekdayCard(trend, totals, color, catName(key)) + "</div>" +
     '<div class="detail-grid">' + runCard(matches) + hoursCard(trend, matches, color) + "</div>" +
-    (key === UNTRACKED_KEY ? "" : '<div class="detail-links"><a class="detail-link" href="/trends#focus=' + encodeURIComponent("cat:" + String(key)) +
-      (state.device === "all" ? "" : "&device=" + state.device) + '">See its days and hours in Trends</a>' +
-      '<a class="detail-link" href="/organize">Edit categories</a></div>');
+    (key === UNTRACKED_KEY ? "" : '<div class="detail-links"><a class="detail-link" href="/organize">Edit categories</a></div>');
 }
 
 // ---------- drawing and clicks ----------

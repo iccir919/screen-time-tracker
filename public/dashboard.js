@@ -297,22 +297,17 @@ const shortDate = (d) => fmtDate(d, { weekday: "short", month: "short", day: "nu
 // horizontal share bar, "height" for a vertical stacked bar. With a title,
 // hovering a piece shows the bar's categories (title and line on top) with
 // that piece's category marked, and fades the other categories in the chart.
-// click: "pick" makes a click highlight the category (Today), "toggle"
-// spotlights it (Trends).
-function stackedParts(totals, sum, mode, title = "", line = "", click = "") {
+// pick: clicking a piece highlights its category.
+function stackedParts(totals, sum, mode, title = "", line = "", pick = false) {
   return CAT_KEYS.filter((key) => (totals.get(key) ?? 0) > 0).map((key) => {
     const share = (totals.get(key) / (sum || 1)) * 100;
     const size = mode === "flex" ? "flex:" + share.toFixed(3) + " 1 0" : "height:" + share.toFixed(3) + "%";
     const tip = title ? ' data-tip="' + esc(title + "\n" + line) + '" data-tip-rows="' + categoryRows(totals, key) + '"' : "";
-    const act = click === "pick" ? ' data-pick-cat="' + esc(String(key)) + '"' : click === "toggle" ? ' data-toggle="' + esc(String(key)) + '"' : "";
+    const act = pick ? ' data-pick-cat="' + esc(String(key)) + '"' : "";
     return '<span data-cat="' + esc(String(key)) + '"' + act + ' style="' + size + ";background:" + catColor(key) + '"' + tip + "></span>";
   }).join("");
 }
 
-// The attribute that picks what's highlighted now (so clicking it again clears it)
-const focusPickAttr = () => (state.focus.app !== undefined
-  ? 'data-pick-app="' + esc(appKey(state.focus.app)) + '"'
-  : 'data-pick-cat="' + esc(String(state.focus.cat)) + '"');
 
 // Hover rows for categories (see showTip in common.js): largest first, up to
 // 8 and then "N more", with current (a category key) marked. Ready to put in
@@ -437,7 +432,7 @@ function renderLegend() {
   const cats = categoryTotals(chosenDays());
   const keys = CAT_KEYS.filter((key) => (cats.get(key) ?? 0) > 0);
   el("legend").innerHTML = toggleButtons(keys) +
-    (keys.length ? '<span class="legend-hint">' + (state.only.size ? "Click more to add them" : "Click a category to spotlight it") + "</span>" +
+    (keys.length ? '<span class="legend-hint">' + (state.only.size ? "Click more to add them" : "Click a category to highlight it") + "</span>" +
       '<a class="legend-link" href="/organize">Edit categories</a>' : "");
 }
 
@@ -648,19 +643,17 @@ function todayHours(days) {
   return '<div class="lane-hours"><div class="hour-bars">' + bars.join("") + "</div></div>";
 }
 
-// Pieces of a bar, one per category, each opening that category on the Apps
-// page (Untracked has no page, so it's a plain piece). Hovering a piece shows
-// the whole bar's categories (title and line on top, like "Mon" and "3h in
-// all") with that piece's category marked.
+// Patterns: pieces of a bar, one per category. Hovering a piece shows the
+// whole bar's categories (title and line on top, like "Mon" and "3h in
+// all") with that piece's category marked, and clicking it highlights that
+// category on Trends.
 function stackedLinks(totals, sum, mode, title, line) {
   return CAT_KEYS.filter((key) => (totals.get(key) ?? 0) > 0).map((key) => {
     const share = (totals.get(key) / (sum || 1)) * 100;
     const size = mode === "flex" ? "flex:" + share.toFixed(3) + " 1 0" : "height:" + share.toFixed(3) + "%";
-    const tip = ' data-tip="' + esc(title + "\n" + line + (key === UNTRACKED_KEY ? "" : "\nClick to open " + catName(key) + " on the Apps page")) + '" data-tip-rows="' + categoryRows(totals, key) + '"';
-    const cat = ' data-cat="' + esc(String(key)) + '"';
-    return key === UNTRACKED_KEY
-      ? "<span" + cat + ' style="' + size + ";background:" + catColor(key) + '"' + tip + "></span>"
-      : '<a href="' + categoryLink(key) + '"' + cat + ' style="' + size + ";background:" + catColor(key) + '"' + tip + "></a>";
+    const on = state.only.has(key);
+    const tip = ' data-tip="' + esc(title + "\n" + line + "\nClick to " + (on ? "stop highlighting " : "highlight ") + catName(key)) + '" data-tip-rows="' + categoryRows(totals, key) + '"';
+    return '<span data-cat="' + esc(String(key)) + '" data-toggle="' + esc(String(key)) + '" style="' + size + ";background:" + catColor(key) + '"' + tip + "></span>";
   }).join("");
 }
 
@@ -709,7 +702,7 @@ function renderLists() {
   for (const m of [apps, cats]) for (const [k, v] of m) m.set(k, v / days.length);
   const catSum = [...cats.values()].reduce((x, y) => x + y, 0);
   const shareTitle = el("list-title").textContent, shareLine = fmt(catSum) + (isDay ? " in all" : " daily average");
-  const share = '<span class="share list-share" data-tip="' + esc(shareTitle + "\n" + shareLine) + '" data-tip-rows="' + categoryRows(cats) + '">' + stackedParts(cats, catSum, "flex", shareTitle, shareLine) + "</span>";
+  const share = '<span class="share list-share" data-tip="' + esc(shareTitle + "\n" + shareLine) + '" data-tip-rows="' + categoryRows(cats) + '">' + stackedParts(cats, catSum, "flex", shareTitle, shareLine + "\nClick a color to highlight it", true) + "</span>";
   const f = state.focus;
   const row = (attr, on, name, sub, secs, key) =>
     '<button class="list-row' + (on ? " on" : "") + '" ' + attr + (on ? ' style="--tint:' + solidColor(key) + '"' : "") + ">" +
@@ -813,7 +806,7 @@ function renderBars() {
     ? (state.day === todayIdx ? "Last 8 days" : "8 days to " + fmtDate(state.day, { month: "short", day: "numeric" }))
     : PAGE === "today" ? (win.to === todayIdx - 1 ? "Last 7 days" : "7 days to " + fmtDate(win.to, { month: "short", day: "numeric" })) : "Day by day";
   el("bars-hint").innerHTML = isDay
-    ? "Click a color to highlight it, or a day's name to see it"
+    ? "Click a day to see it"
     :
       '<span class="avg-key"></span>' + n + "-day average" + (state.focus ? " of " + esc(focusName()) : "") + " " + (avg === null ? "–" : "<b>" + fmt(avg) + "</b>");
 
@@ -833,32 +826,26 @@ function renderBars() {
     const label = shortDate(d);
     const tip = [fmtDate(d, { weekday: "long", month: "short", day: "numeric" }), has ? fmt(t) + (state.focus ? " of " + focusName() : " in all") : "No data"]
       .concat(state.focus && has ? [fmt(total(d)) + " in all"] : [])
-      .concat(partial ? ["Missing data from a device"] : []).join("\n");
-    // Clicking a piece highlights its category (Today) or spotlights it
-    // (Trends); a day opens from its name under the bars
-    const clickLine = PAGE === "today" ? (state.focus ? "Click to clear the highlight" : "Click a color to highlight it") : "Click a color to spotlight it";
+      .concat(partial ? ["Missing data from a device"] : [], [PAGE === "today" ? "Click to see this day" : "Click to see it in Today"]).join("\n");
     const rows = has && !state.focus ? ' data-tip-rows="' + categoryRows(cats) + '"' : "";
     // On Today, the other days are faded; on Trends, all are in full color
     const cls = "stack" + (isDay && d !== state.day ? " faded" : "") + (partial ? " partial" : "");
+    // A day's bar opens the day; hovering a piece marks its category in the tooltip
     const [tipTitle, ...tipLines] = tip.split("\n");
     const pieces = state.focus
-      ? '<span ' + focusPickAttr() + ' data-tip="' + esc(tip + "\n" + clickLine) + '" style="height:100%;background:' + focusColor() + '"></span>'
-      : stackedParts(cats, t, "height", tipTitle, tipLines.concat(clickLine).join("\n"), PAGE === "today" ? "pick" : "toggle");
-    return '<div class="bar-col pickable" data-tip="' + esc(tip) + '"' + rows + ' role="img" aria-label="' + esc(label + ": " + (has ? fmt(t) : "no data")) + '">' +
+      ? '<span style="height:100%;background:' + focusColor() + '"></span>'
+      : stackedParts(cats, t, "height", tipTitle, tipLines.join("\n"));
+    return '<button class="bar-col" data-day="' + d + '" data-tip="' + esc(tip) + '"' + rows + ' aria-label="' + esc(label + ": " + (has ? fmt(t) : "no data")) + '">' +
       (has && t > 0 ? '<span class="' + cls + '" style="height:' + ((t / top) * 100).toFixed(1) + '%">' + pieces + "</span>"
-        : '<span class="stack none"></span>') + "</div>";
+        : '<span class="stack none"></span>') + "</button>";
   });
   const labels = days.map((d, i) => {
     const on = isDay && d === state.day;
     let text = d === todayIdx ? "Today" : fmtDate(d, { weekday: "short" });
     if (isDay && d === state.day - 7) text = "Last " + text;
     if (many) text = (days.length - 1 - i) % 7 === 0 ? fmtDate(d, { month: "short", day: "numeric" }) : "";
-    const inner = '<span class="label' + (on ? " on" : "") + '">' + esc(text) + "</span>" +
-      (many ? "" : '<span class="time">' + (anyData(d) ? fmt(pickTotal(d)) : "–") + "</span>");
-    // A day's name opens it: on Today right here, on Trends in Today
-    if (!text) return "<div></div>";
-    const tipText = shortDate(d) + "\n" + (PAGE === "today" ? "Click to see this day" : "Click to open it in Today");
-    return '<div><button class="day-link" data-day="' + d + '" data-tip="' + esc(tipText) + '">' + inner + "</button></div>";
+    return '<div><span class="label' + (on ? " on" : "") + '">' + esc(text) + "</span>" +
+      (many ? "" : '<span class="time">' + (anyData(d) ? fmt(pickTotal(d)) : "–") + "</span>") + "</div>";
   });
   el("bars").innerHTML =
     '<div class="bar-plot' + (many ? " many" : "") + '">' +
@@ -978,13 +965,14 @@ el("next").addEventListener("click", () => update({ day: state.day + step() }));
 
 const on = (id, type, fn) => { if (shown(id)) el(id).addEventListener(type, fn); };
 
-// A category button at the top of Trends: spotlight it in every chart
+// A category button at the top of Trends, or a piece of a Patterns bar:
+// highlight that category in every chart
 document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-toggle]");
   if (!b) return;
   if (b.dataset.toggle === "all") state.only.clear();
   else {
-    // The first click spotlights a category; more clicks add or remove
+    // The first click highlights a category; more clicks add or remove
     // others; removing the last one shows everything again
     const key = CAT_KEYS.find((k) => String(k) === b.dataset.toggle);
     if (state.only.has(key)) state.only.delete(key); else state.only.add(key);
@@ -1036,10 +1024,10 @@ document.addEventListener("mouseover", (e) => {
   setHot(t.dataset.pickApp !== undefined ? 'data-pick-app="' + CSS.escape(t.dataset.pickApp) + '"' : 'data-pick-cat="' + CSS.escape(t.dataset.pickCat) + '"');
 });
 document.addEventListener("mouseleave", () => setHot(""));
-// Hovering a category's piece in a chart made of category bars (the cards,
-// Used today's bar, the day bars, Trends' Patterns) fades the other
-// categories in that chart
-const CAT_CHARTS = "#period-cards, #bars, #top-apps, .pattern-box";
+// Hovering a category's piece where a click highlights it (Used today's bar,
+// Trends' Patterns) fades the other categories in that chart, showing what
+// the click would do
+const CAT_CHARTS = "#top-apps, .pattern-box";
 let catHover = null; // [chart, key]
 document.addEventListener("mouseover", (e) => {
   const piece = e.target.closest?.("[data-cat]");
